@@ -1,15 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserIcon, LockIcon, EyeIcon, EyeOffIcon, LogoIcon } from '../components/Icons';
+import { UserIcon, LockIcon, EyeIcon, EyeOffIcon } from '../components/Icons';
 import authService from '../services/auth.service';
 
 export default function Login() {
-  const [email, setEmail] = useState('admin@jansaas.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+
+  // Agar token pehle se hai toh seedha dashboard pe bhejo
+  useEffect(() => {
+    if (localStorage.getItem('token')) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -17,18 +24,25 @@ export default function Login() {
     setError('');
 
     try {
+      // Real backend API call: POST /auth/super-admin/login
       const data = await authService.login(email, password);
-      
-      // Save the JWT token
-      localStorage.setItem('token', data.token);
-      
-      // Navigate to dashboard
-      navigate('/dashboard');
+
+      // Backend response: { success: true, data: { token, admin } }
+      const token = data.data?.token || data.token;
+      const admin = data.data?.admin || data.admin;
+
+      // Token + admin info localStorage mein save karo
+      localStorage.setItem('token', token);
+      localStorage.setItem('admin', JSON.stringify(admin));
+
+      // Dashboard pe bhejo
+      navigate('/dashboard', { replace: true });
     } catch (err) {
-      if (err.response && err.response.data && err.response.data.message) {
-        setError(err.response.data.message);
+      const msg = err.response?.data?.message || err.response?.data?.data?.message;
+      if (msg) {
+        setError(Array.isArray(msg) ? msg.join(', ') : msg);
       } else {
-        setError('Server unreachable. Please try again later.');
+        setError('Server unreachable. Please check if backend is running.');
       }
     } finally {
       setLoading(false);
@@ -37,15 +51,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-2xl font-bold tracking-tight text-gray-900">
-          Sign in to JanSaaS
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600 font-medium">
-          Super Admin Portal
-        </p>
-      </div>
-
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow-sm border border-gray-100 sm:rounded-xl sm:px-10">
           {error && (

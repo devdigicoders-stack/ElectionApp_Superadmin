@@ -18,8 +18,6 @@ const navItems = [
   { name: 'Tenants / Clients', path: '/clients', icon: Users },
   { name: 'Subscription Plans', path: '/plans', icon: CreditCard },
   { name: 'Subscriptions', path: '/subscriptions', icon: Receipt },
-  { name: 'Feature Management', path: '/features', icon: Layers },
-  { name: 'White-Label / Branding', path: '/white-label', icon: Palette },
   { name: 'Domains', path: '/domains', icon: Globe },
   { name: 'Admin & Staff', path: '/staff', icon: UserCircle },
   { name: 'Usage Management', path: '/usage', icon: BarChart3 },
@@ -111,7 +109,11 @@ export default function AdminLayout() {
 
         {/* Logout */}
         <div 
-          onClick={() => navigate('/', { replace: true })}
+          onClick={() => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('admin');
+            navigate('/', { replace: true });
+          }}
           className={`py-4 border-t border-red-500/20 shrink-0 flex items-center cursor-pointer hover:bg-red-500/20 text-red-400 transition-colors group ${isSidebarOpen ? 'px-6 gap-3' : 'justify-center'}`}
         >
           <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center shrink-0 transition-colors">
