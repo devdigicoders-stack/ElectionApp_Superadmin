@@ -51,6 +51,8 @@ export default function Staff() {
   const [staff, setStaff] = useState([]);
   const [roles, setRoles] = useState(DEFAULT_ROLES);        // GET /staff/roles
   const [allPermissions, setAllPermissions] = useState(DEFAULT_PERMISSIONS); // GET /staff/roles
+  const [defaultPermsMap, setDefaultPermsMap] = useState({});
+  const [permissionCategories, setPermissionCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -74,17 +76,26 @@ export default function Staff() {
       const res = await staffService.getRoles();
       if (res?.roles?.length) {
         const formatted = res.roles.map(r => ({
-          value: r,
-          label: r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          value: typeof r === 'string' ? r : r.key,
+          label: typeof r === 'string'
+            ? r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+            : (r.name || r.key),
         }));
         setRoles(formatted);
       }
       if (res?.defaultPermissions) {
-        const allPerms = [...new Set(Object.values(res.defaultPermissions).flat())];
+        setDefaultPermsMap(res.defaultPermissions);
+      }
+      if (res?.availablePermissionsByCategory?.length) {
+        setPermissionCategories(res.availablePermissionsByCategory);
+        const all = res.availablePermissionsByCategory.flatMap(c => c.permissions.map(p => p.key));
+        setAllPermissions(all);
+      } else if (res?.defaultPermissions) {
+        const allPerms = [...new Set(Object.values(res.defaultPermissions).flat())].filter(p => p !== '*');
         if (allPerms.length) setAllPermissions(allPerms);
       }
-    } catch {
-      // Silent fail — DEFAULT_ROLES / DEFAULT_PERMISSIONS already set as safe fallback
+    } catch (err) {
+      console.error('loadRoles failed, using fallbacks:', err);
     }
   }
 
@@ -118,7 +129,13 @@ export default function Staff() {
         setLoadingDetail(false);
       }
     } else if (type === 'ADD') {
-      setForm(emptyForm);
+      const defaultRole = 'support_executive';
+      const initialPerms = defaultPermsMap[defaultRole] || [];
+      setForm({
+        ...emptyForm,
+        role: defaultRole,
+        permissions: initialPerms.includes('*') ? allPermissions : initialPerms,
+      });
     } else if (type === 'EDIT' && data) {
       setForm({
         name: data.name || '',
@@ -129,6 +146,15 @@ export default function Staff() {
         permissions: data.permissions || [],
       });
     }
+  }
+
+  function handleRoleChange(selectedRole) {
+    const defaultPerms = defaultPermsMap[selectedRole] || [];
+    setForm(f => ({
+      ...f,
+      role: selectedRole,
+      permissions: defaultPerms.includes('*') ? allPermissions : defaultPerms,
+    }));
   }
 
   function closeModal() {
@@ -369,7 +395,7 @@ export default function Staff() {
       {/* ── MODAL ── */}
       {modal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
+          <div className={`bg-white rounded-2xl shadow-2xl w-full ${(modal.type === 'ADD' || modal.type === 'EDIT' || modal.type === 'VIEW') ? 'max-w-2xl' : 'max-w-lg'} overflow-hidden max-h-[90vh] flex flex-col`}>
 
             {/* Modal Header */}
             <div className={`px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0 ${modal.type === 'DELETE' ? 'bg-red-50' : 'bg-gray-50'}`}>
@@ -395,34 +421,37 @@ export default function Staff() {
               {/* ADD / EDIT */}
               {(modal.type === 'ADD' || modal.type === 'EDIT') && (
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name *</label>
-                    <input type="text" value={form.name}
-                      onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                      placeholder="e.g. Rahul Sharma"
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Email *</label>
-                    <input type="email" value={form.email}
-                      onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                      placeholder="staff@platform.com"
-                      disabled={modal.type === 'EDIT'}
-                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400"
-                    />
-                  </div>
-                  {modal.type === 'ADD' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Password *</label>
-                      <input type="password" value={form.password}
-                        onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                        placeholder="Min 6 characters"
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name *</label>
+                      <input type="text" value={form.name}
+                        onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="e.g. Rahul Sharma"
                         className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                     </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Email *</label>
+                      <input type="email" value={form.email}
+                        onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                        placeholder="staff@platform.com"
+                        disabled={modal.type === 'EDIT'}
+                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className={`grid grid-cols-1 ${modal.type === 'ADD' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
+                    {modal.type === 'ADD' && (
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Password *</label>
+                        <input type="password" value={form.password}
+                          onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                          placeholder="Min 6 characters"
+                          className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    )}
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-1">Phone</label>
                       <input type="text" value={form.phone}
@@ -434,7 +463,7 @@ export default function Staff() {
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-1">Role *</label>
                       <select value={form.role}
-                        onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                        onChange={e => handleRoleChange(e.target.value)}
                         className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       >
                         {roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
@@ -443,18 +472,44 @@ export default function Staff() {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Permissions</label>
-                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-100 rounded-lg bg-gray-50">
-                      {allPermissions.map(perm => (
-                        <label key={perm} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                          <input type="checkbox"
-                            checked={form.permissions.includes(perm)}
-                            onChange={() => togglePermission(perm)}
-                            className="rounded text-indigo-600"
-                          />
-                          {perm}
-                        </label>
-                      ))}
-                    </div>
+                    {permissionCategories.length > 0 ? (
+                      <div className="space-y-3 max-h-64 overflow-y-auto p-2.5 border border-gray-200 rounded-xl bg-gray-50/70">
+                        {permissionCategories.map(cat => (
+                          <div key={cat.category} className="bg-white p-2.5 rounded-lg border border-gray-100 shadow-2xs">
+                            <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-2">{cat.category}</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {cat.permissions.map(perm => (
+                                <label key={perm.key} className="flex items-start gap-2 text-xs text-gray-700 cursor-pointer hover:bg-gray-50 p-1 rounded transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={form.permissions.includes(perm.key) || form.permissions.includes('*')}
+                                    onChange={() => togglePermission(perm.key)}
+                                    className="rounded text-indigo-600 mt-0.5"
+                                  />
+                                  <div>
+                                    <div className="font-semibold text-gray-800">{perm.label}</div>
+                                    <div className="text-[10px] text-gray-400 font-mono">{perm.key}</div>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-100 rounded-lg bg-gray-50">
+                        {allPermissions.map(perm => (
+                          <label key={perm} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input type="checkbox"
+                              checked={form.permissions.includes(perm)}
+                              onChange={() => togglePermission(perm)}
+                              className="rounded text-indigo-600"
+                            />
+                            {perm}
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

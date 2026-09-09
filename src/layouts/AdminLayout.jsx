@@ -13,18 +13,86 @@ const LogoIcon = () => (
   </div>
 );
 
-const navItems = [
+export const navItems = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { name: 'Tenants / Clients', path: '/clients', icon: Users },
-  { name: 'Subscription Plans', path: '/plans', icon: CreditCard },
-  { name: 'Subscriptions', path: '/subscriptions', icon: Receipt },
-  { name: 'Domains', path: '/domains', icon: Globe },
-  { name: 'Admin & Staff', path: '/staff', icon: UserCircle },
-  { name: 'Usage Management', path: '/usage', icon: BarChart3 },
-  { name: 'Notifications', path: '/notifications', icon: Bell },
-  { name: 'Audit Logs', path: '/audit-logs', icon: ScrollText },
+  { name: 'Tenants / Clients', path: '/clients', icon: Users, permission: 'tenants:read' },
+  { name: 'Subscription Plans', path: '/plans', icon: CreditCard, permission: 'plans:read' },
+  { name: 'Subscriptions', path: '/subscriptions', icon: Receipt, permission: 'subscriptions:read' },
+  { name: 'Domains', path: '/domains', icon: Globe, permission: 'tenants:domain' },
+  { name: 'Admin & Staff', path: '/staff', icon: UserCircle, role: 'super_admin' },
+  { name: 'Usage Management', path: '/usage', icon: BarChart3, permission: 'usage:read' },
+  { name: 'Notifications', path: '/notifications', icon: Bell, permission: 'system:health' },
+  { name: 'Audit Logs', path: '/audit-logs', icon: ScrollText, permission: 'audit_logs:read' },
   { name: 'My Profile', path: '/profile', icon: UserCircle },
 ];
+
+export const ROLE_LABELS = {
+  super_admin: 'Super Admin',
+  sales_manager: 'Sales Manager',
+  support_executive: 'Support Executive',
+  technical_support: 'Technical Support',
+  finance_manager: 'Finance Manager',
+};
+
+export const DEFAULT_ROLE_PERMISSIONS = {
+  super_admin: ['*'],
+  sales_manager: [
+    'tenants:read',
+    'tenants:create',
+    'plans:read',
+    'subscriptions:read',
+    'usage:read',
+  ],
+  support_executive: [
+    'tenants:read',
+    'tenants:impersonate',
+    'audit_logs:read',
+    'complaints:read',
+  ],
+  technical_support: [
+    'tenants:read',
+    'tenants:impersonate',
+    'tenants:domain',
+    'audit_logs:read',
+    'system:health',
+  ],
+  finance_manager: [
+    'subscriptions:read',
+    'subscriptions:manage',
+    'invoices:read',
+    'revenue:read',
+    'plans:read',
+  ],
+};
+
+export function getEffectivePermissions(admin) {
+  if (!admin) return [];
+  if (Array.isArray(admin.permissions) && admin.permissions.length > 0) {
+    return admin.permissions;
+  }
+  return DEFAULT_ROLE_PERMISSIONS[admin.role] || [];
+}
+
+export function hasPermission(item, admin) {
+  if (!admin) return false;
+  const perms = getEffectivePermissions(admin);
+
+  // Super admin role has full access to everything
+  if (admin.role === 'super_admin' || perms.includes('*')) return true;
+
+  // If item specifically requires super_admin role (e.g. Staff Management)
+  if (item.role && item.role === 'super_admin') {
+    return false;
+  }
+
+  // If item requires a specific permission
+  if (item.permission) {
+    return perms.includes(item.permission);
+  }
+
+  // General items without restriction (Dashboard, Profile)
+  return true;
+}
 
 export default function AdminLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
@@ -51,7 +119,17 @@ export default function AdminLayout() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const currentNav = navItems.find(item => location.pathname.includes(item.path));
+  const admin = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('admin') || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  const allowedNavItems = navItems.filter(item => hasPermission(item, admin));
+  const roleName = ROLE_LABELS[admin.role] || admin.role || 'Staff';
+
+  const currentNav = allowedNavItems.find(item => location.pathname.includes(item.path)) || navItems.find(item => location.pathname.includes(item.path));
   const pageTitle = currentNav ? currentNav.name : 'Dashboard';
 
   return (
@@ -72,14 +150,14 @@ export default function AdminLayout() {
           {isSidebarOpen && (
             <div className="flex flex-col overflow-hidden">
               <span className="text-xl font-bold tracking-wide text-white leading-tight">Political</span>
-              <span className="text-[10px] text-emerald-400 font-semibold tracking-widest uppercase">Admin</span>
+              <span className="text-[10px] text-emerald-400 font-semibold tracking-widest uppercase">{roleName}</span>
             </div>
           )}
         </div>
         
         <div className="flex-1 overflow-y-auto py-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           <nav className="space-y-1.5 px-3">
-            {navItems.map((item) => (
+            {allowedNavItems.map((item) => (
               <NavLink
                 key={item.name}
                 to={item.path}
@@ -105,7 +183,18 @@ export default function AdminLayout() {
           </nav>
         </div>
 
-
+        {/* Logged-in Staff Info */}
+        <div className={`py-3 px-4 border-t border-white/5 flex items-center gap-3 ${!isSidebarOpen && 'justify-center'}`}>
+          <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm shrink-0 border border-emerald-500/30">
+            {admin.name ? admin.name[0].toUpperCase() : 'A'}
+          </div>
+          {isSidebarOpen && (
+            <div className="flex flex-col min-w-0 overflow-hidden">
+              <span className="text-[13px] font-semibold text-white truncate">{admin.name || 'Admin User'}</span>
+              <span className="text-[10px] text-emerald-400 font-medium truncate uppercase tracking-wider">{roleName}</span>
+            </div>
+          )}
+        </div>
 
         {/* Logout */}
         <div 
@@ -114,14 +203,14 @@ export default function AdminLayout() {
             localStorage.removeItem('admin');
             navigate('/', { replace: true });
           }}
-          className={`py-4 border-t border-red-500/20 shrink-0 flex items-center cursor-pointer hover:bg-red-500/20 text-red-400 transition-colors group ${isSidebarOpen ? 'px-6 gap-3' : 'justify-center'}`}
+          className={`py-3.5 border-t border-white/5 shrink-0 flex items-center cursor-pointer hover:bg-red-500/10 text-gray-400 hover:text-red-400 transition-colors group ${isSidebarOpen ? 'px-6 gap-3' : 'justify-center'}`}
         >
-          <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center shrink-0 transition-colors">
-            <LogOut className="w-4 h-4 text-red-400" />
+          <div className="w-8 h-8 rounded-full bg-white/5 group-hover:bg-red-500/10 flex items-center justify-center shrink-0 transition-colors">
+            <LogOut className="w-4 h-4 text-gray-400 group-hover:text-red-400" />
           </div>
           {isSidebarOpen && (
             <div className="whitespace-nowrap overflow-hidden">
-              <p className="text-[13px] font-bold text-red-400">Logout</p>
+              <p className="text-[13px] font-semibold">Logout</p>
             </div>
           )}
         </div>
@@ -160,12 +249,14 @@ export default function AdminLayout() {
 
             <button 
               onClick={() => navigate('/profile')}
-              className="flex items-center gap-2 hover:bg-gray-50 p-1 rounded-full transition-colors sm:pr-3"
+              className="flex items-center gap-2.5 hover:bg-gray-50 p-1.5 rounded-full transition-colors sm:pr-3 cursor-pointer"
             >
-              <img src="https://i.pravatar.cc/150?img=11" alt="Profile" className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover shadow-sm border border-gray-100" />
-              <div className="hidden sm:flex flex-col items-start">
-                <span className="text-sm font-bold text-gray-800 leading-none">Super Admin</span>
-                <span className="text-[11px] font-semibold text-gray-500 mt-1 leading-none">Administrator</span>
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shadow-sm border border-emerald-200 shrink-0">
+                {admin.name ? admin.name[0].toUpperCase() : 'A'}
+              </div>
+              <div className="hidden sm:flex flex-col items-start text-left">
+                <span className="text-sm font-bold text-gray-800 leading-none">{admin.name || 'Admin User'}</span>
+                <span className="text-[11px] font-semibold text-emerald-600 mt-1 leading-none">{roleName}</span>
               </div>
             </button>
           </div>

@@ -30,6 +30,15 @@ const tenantsService = {
   updateBranding: (id, branding) =>
     apiClient.patch(`/super-admin/tenants/${id}/branding`, branding).then(r => r.data.data),
 
+  // POST /uploads/branding — Upload logo/image
+  uploadLogo: (file) => {
+    const fd = new FormData();
+    fd.append('files', file);
+    return apiClient
+      .post('/uploads/branding', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then(r => r.data?.urls?.[0] || r.data?.[0]);
+  },
+
   // GET /super-admin/tenants/:id/features — Tenant ki features dekho
   getFeatures: (id) =>
     apiClient.get(`/super-admin/tenants/${id}/features`).then(r => r.data.data),

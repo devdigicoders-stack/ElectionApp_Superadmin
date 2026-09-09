@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   Edit, Palette, Settings,
-  LogOut, History, ShieldAlert, CheckCircle2, XCircle, Plus, X, Loader2, Eye
+  LogOut, History, ShieldAlert, CheckCircle2, XCircle, Plus, X, Loader2, Eye, UserPlus,
+  Upload, Image, Trash2
 } from 'lucide-react';
 import tenantsService from '../services/tenants.service';
 
@@ -23,6 +24,7 @@ export default function Clients() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [error, setError] = useState('');
   const [modalType, setModalType] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -37,6 +39,21 @@ export default function Clients() {
   useEffect(() => {
     loadClients();
   }, []);
+
+  async function handleLogoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setUploadingLogo(true);
+      setError('');
+      const uploadedPath = await tenantsService.uploadLogo(file);
+      setForm(f => ({ ...f, logoUrl: uploadedPath }));
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Logo upload failed. Please try again.');
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
 
   async function loadClients() {
     try {
@@ -80,6 +97,9 @@ export default function Clients() {
       } catch {
         setFeatures([]);
       }
+    }
+    if (type === 'CREATE_ADMIN' && client) {
+      setForm({ name: client.branding?.leaderName || client.name || '', email: '', password: '', role: 'leader' });
     }
     if (type === 'HISTORY' && client) {
       try {
@@ -193,11 +213,29 @@ export default function Clients() {
     }
   }
 
+  async function handleCreateAdminUser() {
+    if (!form.name?.trim() || !form.email?.trim() || !form.password?.trim()) {
+      setError('Name, Email aur Password teeno zaroori hain.');
+      return;
+    }
+    try {
+      setSaving(true);
+      await tenantsService.createAdminUser(selectedClient._id, form);
+      alert(`✅ Admin User "${form.email}" successfully create ho gaya!`);
+      closeModal();
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Admin user create karne mein dikkat aayi.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function handleConfirm() {
     if (modalType === 'ADD') handleCreate();
     else if (modalType === 'EDIT') handleEdit();
     else if (modalType === 'BRANDING') handleBranding();
     else if (modalType === 'SUSPEND') handleSuspendToggle();
+    else if (modalType === 'CREATE_ADMIN') handleCreateAdminUser();
   }
 
   return (
@@ -237,8 +275,27 @@ export default function Clients() {
                 {clients.map((client) => (
                   <tr key={client._id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-4 px-6">
-                      <div className="font-semibold text-gray-900">{client.name}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{client.branding?.leaderName || '—'}</div>
+                      <div className="flex items-center gap-3">
+                        {client.branding?.logoUrl ? (
+                          <img
+                            src={client.branding.logoUrl.startsWith('http') ? client.branding.logoUrl : `http://localhost:3001${client.branding.logoUrl}`}
+                            alt={client.name}
+                            className="w-9 h-9 rounded-lg object-contain bg-gray-50 border border-gray-200 p-0.5 shrink-0"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div
+                            className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-xs"
+                            style={{ backgroundColor: client.branding?.primaryColor || '#2563EB' }}
+                          >
+                            {client.name ? client.name[0].toUpperCase() : 'C'}
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-semibold text-gray-900">{client.name}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">{client.branding?.leaderName || '—'}</div>
+                        </div>
+                      </div>
                     </td>
                     <td className="py-4 px-6">
                       <span className="font-mono text-xs font-medium text-blue-700 bg-blue-50 border border-blue-100 rounded-md px-2 py-1">
@@ -272,6 +329,9 @@ export default function Clients() {
                         </button>
                         <button onClick={() => openModal('FEATURES', client)} title="Features" className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors">
                           <Settings className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => openModal('CREATE_ADMIN', client)} title="Create Leader / Admin User" className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors">
+                          <UserPlus className="w-4 h-4" />
                         </button>
                         <div className="w-px h-5 bg-gray-200 mx-1"></div>
                         <button onClick={() => handleImpersonate(client)} title="Login as Client" className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-md transition-colors">
@@ -309,6 +369,7 @@ export default function Clients() {
                 {modalType === 'EDIT' && 'Edit Client Info'}
                 {modalType === 'BRANDING' && 'Theme & Branding'}
                 {modalType === 'FEATURES' && 'Enable / Disable Features'}
+                {modalType === 'CREATE_ADMIN' && `Create Leader / Admin — ${selectedClient?.name}`}
                 {modalType === 'HISTORY' && 'Impersonation Logs'}
                 {modalType === 'SUSPEND' && 'Confirm Action'}
                 {modalType === 'IMPERSONATE_RESULT' && '🔐 Login as Client — Token'}
@@ -438,13 +499,60 @@ export default function Clients() {
               {/* BRANDING */}
               {modalType === 'BRANDING' && (
                 <div className="space-y-4">
+                  {/* Party / Campaign Logo */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Party / Campaign Logo</label>
+                    <div className="flex items-center gap-4 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                      <div className="w-16 h-16 rounded-xl border border-dashed border-gray-300 bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+                        {form.logoUrl ? (
+                          <img
+                            src={form.logoUrl.startsWith('http') ? form.logoUrl : `http://localhost:3001${form.logoUrl}`}
+                            alt="Logo Preview"
+                            className="w-full h-full object-contain p-1"
+                            onError={(e) => { e.target.src = 'https://placehold.co/100x100?text=Logo'; }}
+                          />
+                        ) : (
+                          <Image className="w-7 h-7 text-gray-300" />
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg text-xs font-semibold text-gray-700 cursor-pointer shadow-xs transition-colors">
+                            {uploadingLogo ? <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" /> : <Upload className="w-3.5 h-3.5 text-blue-600" />}
+                            <span>{uploadingLogo ? 'Uploading...' : 'Upload Logo'}</span>
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                              className="hidden"
+                              disabled={uploadingLogo}
+                              onChange={handleLogoUpload}
+                            />
+                          </label>
+
+                          {form.logoUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, logoUrl: '' }))}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Remove Logo"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1">PNG, JPG, or WebP (e.g. Party symbol)</p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Leader Name</label>
-                    <input type="text" value={form.leaderName || ''} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none" onChange={e => setForm(f => ({ ...f, leaderName: e.target.value }))} />
+                    <input type="text" value={form.leaderName || ''} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="e.g. Narendra Kumar" onChange={e => setForm(f => ({ ...f, leaderName: e.target.value }))} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tagline</label>
-                    <input type="text" value={form.tagline || ''} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none" onChange={e => setForm(f => ({ ...f, tagline: e.target.value }))} />
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tagline / Slogan</label>
+                    <input type="text" value={form.tagline || ''} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="e.g. Vikas Ki Nayi Udaan" onChange={e => setForm(f => ({ ...f, tagline: e.target.value }))} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Primary Color</label>
@@ -482,6 +590,59 @@ export default function Clients() {
               )}
 
 
+
+              {/* CREATE ADMIN */}
+              {modalType === 'CREATE_ADMIN' && (
+                <div className="space-y-4">
+                  <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-lg text-xs text-emerald-800">
+                    Aap <strong>{selectedClient?.name}</strong> (Slug: <code>{selectedClient?.slug}</code>) ke liye naya login account create kar rahe hain.
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      value={form.name || ''}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="e.g. Narendra Kumar"
+                      onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email Address (Login ID)</label>
+                    <input
+                      type="email"
+                      value={form.email || ''}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="leader@campaign.com"
+                      onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <input
+                      type="password"
+                      value={form.password || ''}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="Minimum 6 characters"
+                      onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                    <select
+                      value={form.role || 'leader'}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
+                      onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                    >
+                      <option value="leader">Leader (Main Candidate - Full Access)</option>
+                      <option value="admin">Admin (Election Office Head)</option>
+                      <option value="content_manager">Content Manager (Media / Events)</option>
+                      <option value="complaint_manager">Complaint Manager (Shikayat Prabhari)</option>
+                      <option value="volunteer_manager">Volunteer Manager (Karyakarta Prabhari)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
 
               {/* HISTORY */}
               {modalType === 'HISTORY' && (
@@ -539,7 +700,7 @@ export default function Clients() {
                       } disabled:opacity-60`}
                   >
                     {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {modalType === 'SUSPEND' ? 'Confirm' : 'Save Changes'}
+                    {modalType === 'SUSPEND' ? 'Confirm' : modalType === 'CREATE_ADMIN' ? 'Create Admin User' : 'Save Changes'}
                   </button>
                 )}
               </div>

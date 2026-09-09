@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Globe, Plus, ShieldCheck, Trash2, Edit, AlertCircle,
-  Search, CheckCircle, Clock, XCircle, Link, Loader2, Copy
+  Search, CheckCircle, Clock, XCircle, Link, Loader2, Copy, Eye
 } from 'lucide-react';
 import domainsService from '../services/domains.service';
 
@@ -91,11 +91,18 @@ export default function Domains() {
   }
 
   async function handleConfigure() {
-    if (!domainInput.trim()) { setError('Domain enter karo'); return; }
+    const clean = domainInput
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/.*$/, '')
+      .trim()
+      .toLowerCase();
+
+    if (!clean) { setError('Domain enter karo (e.g. www.wncoders.com)'); return; }
     try {
       setSaving(true);
-      const res = await domainsService.configureDomain(modal.item.tenantId, domainInput.trim());
+      const res = await domainsService.configureDomain(modal.item.tenantId, clean);
       setDnsInstructions(res);
+      await loadDomains();
     } catch (e) {
       setError(e?.response?.data?.message || 'Configure failed');
     } finally {
@@ -143,18 +150,27 @@ export default function Domains() {
         </h1>
         <p className="text-sm text-gray-500 mt-1">Configure and verify white-labeled domains for tenants.</p>
         {meta?.stats && (
-          <div className="flex gap-4 mt-4">
-            {[
-              { label: 'Verified', val: meta.stats.verified, color: 'emerald' },
-              { label: 'Pending', val: meta.stats.pending, color: 'orange' },
-              { label: 'Failed', val: meta.stats.failed, color: 'red' },
-              { label: 'Total', val: meta.stats.totalConfigured, color: 'indigo' },
-            ].map(({ label, val, color }) => (
-              <div key={label} className={`bg-${color}-50 border border-${color}-200 rounded-lg px-4 py-2 text-center`}>
-                <div className={`text-xl font-black text-${color}-700`}>{val}</div>
-                <div className={`text-xs font-semibold text-${color}-600`}>{label}</div>
-              </div>
-            ))}
+          <div className="flex flex-wrap gap-4 mt-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-center min-w-[100px]">
+              <div className="text-xl font-black text-blue-700">{meta.total || domains.length}</div>
+              <div className="text-xs font-semibold text-blue-600">Total Clients</div>
+            </div>
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2 text-center min-w-[100px]">
+              <div className="text-xl font-black text-indigo-700">{meta.stats.totalConfigured}</div>
+              <div className="text-xs font-semibold text-indigo-600">Domains Set</div>
+            </div>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-center min-w-[100px]">
+              <div className="text-xl font-black text-emerald-700">{meta.stats.verified}</div>
+              <div className="text-xs font-semibold text-emerald-600">Verified</div>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-center min-w-[100px]">
+              <div className="text-xl font-black text-amber-700">{meta.stats.pending}</div>
+              <div className="text-xs font-semibold text-amber-600">Pending</div>
+            </div>
+            <div className="bg-rose-50 border border-rose-200 rounded-lg px-4 py-2 text-center min-w-[100px]">
+              <div className="text-xl font-black text-rose-700">{meta.stats.failed}</div>
+              <div className="text-xs font-semibold text-rose-600">Failed</div>
+            </div>
           </div>
         )}
       </div>
@@ -315,11 +331,11 @@ export default function Domains() {
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Custom Domain</label>
                   <input type="text" value={domainInput} onChange={e => setDomainInput(e.target.value)}
-                    placeholder="e.g. www.rajeshsharma.in"
+                    placeholder="e.g. www.wncoders.com or wncoders.com"
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                   <p className="text-xs text-gray-500 mt-2 flex items-start gap-1.5">
                     <AlertCircle className="w-4 h-4 shrink-0 text-indigo-400 mt-0.5" />
-                    Domain save hone ke baad DNS records milenge jo client ko add karne honge.
+                    Sirf domain name dalein (bina https:// ya slash / ke). Save karne par DNS CNAME & TXT challenge records generate honge.
                   </p>
                 </div>
               )}
