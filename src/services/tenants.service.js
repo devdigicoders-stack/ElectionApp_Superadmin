@@ -36,7 +36,16 @@ const tenantsService = {
     fd.append('files', file);
     return apiClient
       .post('/uploads/branding', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-      .then(r => r.data?.urls?.[0] || r.data?.[0]);
+      .then(r => r.data?.data?.urls?.[0] || r.data?.urls?.[0] || r.data?.[0]);
+  },
+
+  // POST /uploads/:module — Generic asset upload (leader photo, favicon, banners, etc.)
+  uploadAsset: (moduleName, file) => {
+    const fd = new FormData();
+    fd.append('files', file);
+    return apiClient
+      .post(`/uploads/${moduleName}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then(r => r.data?.data?.urls?.[0] || r.data?.urls?.[0] || r.data?.[0]);
   },
 
   // GET /super-admin/tenants/:id/features — Tenant ki features dekho
@@ -48,6 +57,14 @@ const tenantsService = {
   // body: { isEnabled: true/false }
   toggleFeature: (id, featureKey, isEnabled) =>
     apiClient.patch(`/super-admin/tenants/${id}/features/${featureKey}`, { isEnabled }).then(r => r.data.data),
+
+  // GET /super-admin/tenants/:id/admin-users — Tenant ke admin users ki list
+  getAdminUsers: (id) =>
+    apiClient.get(`/super-admin/tenants/${id}/admin-users`).then(r => r.data.data ?? r.data),
+
+  // PATCH /super-admin/tenants/:id/admin-users/:adminUserId/reset-password
+  resetAdminPassword: (tenantId, adminUserId, newPassword) =>
+    apiClient.patch(`/super-admin/tenants/${tenantId}/admin-users/${adminUserId}/reset-password`, { newPassword }).then(r => r.data),
 
   // POST /super-admin/tenants/:id/admin-users — Tenant ka admin user banao
   // body: { name, email, password, role }
@@ -75,6 +92,18 @@ const tenantsService = {
   // GET /super-admin/tenants/:id/impersonation-history — History dekho
   getImpersonationHistory: (id) =>
     apiClient.get(`/super-admin/tenants/${id}/impersonation-history`).then(r => r.data.data),
+
+  // GET /super-admin/tenants/:id/onboarding-status — 7-Step checklist & progress
+  getOnboardingStatus: (id) =>
+    apiClient.get(`/super-admin/tenants/${id}/onboarding-status`).then(r => r.data.data),
+
+  // PATCH /super-admin/tenants/:id/publish — Platform launch/publish karo
+  publish: (id) =>
+    apiClient.patch(`/super-admin/tenants/${id}/publish`).then(r => r.data.data),
+
+  // POST /super-admin/tenants/onboard-full — Full 1-step onboarding
+  onboardFull: (body) =>
+    apiClient.post('/super-admin/tenants/onboard-full', body).then(r => r.data.data),
 };
 
 export default tenantsService;

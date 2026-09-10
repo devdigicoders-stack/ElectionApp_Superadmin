@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Edit, Palette, Settings,
   LogOut, History, ShieldAlert, CheckCircle2, XCircle, Plus, X, Loader2, Eye, UserPlus,
-  Upload, Image, Trash2
+  Upload, Image, Trash2, Rocket, ClipboardCheck, User, Phone, Mail, Check, AlertCircle
 } from 'lucide-react';
 import tenantsService from '../services/tenants.service';
 
@@ -20,11 +20,21 @@ const FEATURE_KEYS = [
   { key: 'works', label: 'Works / Development' },
 ];
 
+const ELECTION_TYPES = [
+  { value: 'lok_sabha', label: 'Lok Sabha (Parliamentary)' },
+  { value: 'vidhan_sabha', label: 'Vidhan Sabha (Assembly)' },
+  { value: 'municipal', label: 'Municipal Corporation (Nagar Nigam)' },
+  { value: 'panchayat', label: 'Panchayat Election' },
+  { value: 'by_election', label: 'By-Election (Upchunav)' },
+  { value: 'other', label: 'Other Campaign' },
+];
+
 export default function Clients() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingLeaderPhoto, setUploadingLeaderPhoto] = useState(false);
   const [error, setError] = useState('');
   const [modalType, setModalType] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -32,6 +42,9 @@ export default function Clients() {
   const [features, setFeatures] = useState([]);
   const [impersonationHistory, setImpersonationHistory] = useState([]);
   const [impersonationToken, setImpersonationToken] = useState(null); // impersonate result
+  const [onboardingStatus, setOnboardingStatus] = useState(null);
+  const [loadingOnboarding, setLoadingOnboarding] = useState(false);
+  const [tenantAdminUsers, setTenantAdminUsers] = useState([]);
 
   // Form states
   const [form, setForm] = useState({});
@@ -55,6 +68,21 @@ export default function Clients() {
     }
   }
 
+  async function handleLeaderPhotoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setUploadingLeaderPhoto(true);
+      setError('');
+      const uploadedPath = await tenantsService.uploadAsset('branding', file);
+      setForm(f => ({ ...f, leaderPhotoUrl: uploadedPath }));
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Leader photo upload failed. Please try again.');
+    } finally {
+      setUploadingLeaderPhoto(false);
+    }
+  }
+
   async function loadClients() {
     try {
       setLoading(true);
@@ -67,6 +95,34 @@ export default function Clients() {
     }
   }
 
+  async function loadOnboardingStatus(clientId) {
+    try {
+      setLoadingOnboarding(true);
+      setError('');
+      const data = await tenantsService.getOnboardingStatus(clientId);
+      setOnboardingStatus(data);
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Onboarding status load nahi hua.');
+      setOnboardingStatus(null);
+    } finally {
+      setLoadingOnboarding(false);
+    }
+  }
+
+  async function handlePublishTenant(clientId) {
+    try {
+      setSaving(true);
+      setError('');
+      await tenantsService.publish(clientId);
+      await loadClients();
+      await loadOnboardingStatus(clientId);
+    } catch (e) {
+      setError(e?.response?.data?.message || 'Tenant publish karne mein dikkat aayi.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function openModal(type, client = null) {
     setModalType(type);
     setSelectedClient(client);
@@ -74,7 +130,20 @@ export default function Clients() {
     setForm({});
     setClientDetail(null);
     setImpersonationToken(null);
+    setOnboardingStatus(null);
+    setTenantAdminUsers([]);
 
+    if (type === 'ADD') {
+      setForm({
+        name: '',
+        slug: '',
+        leaderName: '',
+        contactPerson: '',
+        mobileNumber: '',
+        email: '',
+        electionType: 'lok_sabha',
+      });
+    }
     if (type === 'VIEW' && client) {
       // GET /super-admin/tenants/:id — single tenant detail
       try {
@@ -83,12 +152,38 @@ export default function Clients() {
       } catch {
         setClientDetail(null);
       }
+      // GET /super-admin/tenants/:id/admin-users — real login users
+      try {
+        const admins = await tenantsService.getAdminUsers(client._id);
+        setTenantAdminUsers(Array.isArray(admins) ? admins : []);
+      } catch {
+        setTenantAdminUsers([]);
+      }
     }
     if (type === 'EDIT' && client) {
-      setForm({ name: client.name, customDomain: client.customDomain || '' });
+      setForm({
+        name: client.name || '',
+        customDomain: client.customDomain || '',
+        leaderName: client.branding?.leaderName || '',
+        contactPerson: client.contactPerson || '',
+        mobileNumber: client.mobileNumber || '',
+        email: client.email || '',
+        electionType: client.electionType || 'other',
+      });
     }
     if (type === 'BRANDING' && client) {
-      setForm({ ...client.branding });
+      setForm({
+        platformName: client.branding?.platformName || '',
+        logoUrl: client.branding?.logoUrl || '',
+        leaderPhotoUrl: client.branding?.leaderPhotoUrl || '',
+        leaderName: client.branding?.leaderName || '',
+        tagline: client.branding?.tagline || '',
+        primaryColor: client.branding?.primaryColor || '#2563EB',
+        secondaryColor: client.branding?.secondaryColor || '#F59E0B',
+      });
+    }
+    if (type === 'ONBOARDING' && client) {
+      loadOnboardingStatus(client._id);
     }
     if (type === 'FEATURES' && client) {
       try {
@@ -118,6 +213,7 @@ export default function Clients() {
     setError('');
     setClientDetail(null);
     setImpersonationToken(null);
+    setOnboardingStatus(null);
   }
 
   async function handleCreate() {
@@ -276,24 +372,35 @@ export default function Clients() {
                   <tr key={client._id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
-                        {client.branding?.logoUrl ? (
+                        {client.branding?.leaderPhotoUrl || client.branding?.logoUrl ? (
                           <img
-                            src={client.branding.logoUrl.startsWith('http') ? client.branding.logoUrl : `http://localhost:3001${client.branding.logoUrl}`}
+                            src={(client.branding?.leaderPhotoUrl || client.branding?.logoUrl).startsWith('http')
+                              ? (client.branding?.leaderPhotoUrl || client.branding?.logoUrl)
+                              : `http://localhost:3001${client.branding?.leaderPhotoUrl || client.branding?.logoUrl}`}
                             alt={client.name}
-                            className="w-9 h-9 rounded-lg object-contain bg-gray-50 border border-gray-200 p-0.5 shrink-0"
+                            className="w-10 h-10 rounded-full object-cover bg-gray-50 border border-gray-200 p-0.5 shrink-0"
                             onError={(e) => { e.target.style.display = 'none'; }}
                           />
                         ) : (
                           <div
-                            className="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-xs"
+                            className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-xs"
                             style={{ backgroundColor: client.branding?.primaryColor || '#2563EB' }}
                           >
                             {client.name ? client.name[0].toUpperCase() : 'C'}
                           </div>
                         )}
                         <div>
-                          <div className="font-semibold text-gray-900">{client.name}</div>
-                          <div className="text-xs text-gray-500 mt-0.5">{client.branding?.leaderName || '—'}</div>
+                          <div className="font-semibold text-gray-900 flex items-center gap-2">
+                            <span>{client.name}</span>
+                            {client.electionType && client.electionType !== 'other' && (
+                              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">
+                                {client.electionType.replace('_', ' ')}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {client.branding?.leaderName ? `Leader: ${client.branding.leaderName}` : (client.contactPerson ? `Contact: ${client.contactPerson}` : '—')}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -303,28 +410,42 @@ export default function Clients() {
                       </span>
                     </td>
                     <td className="py-4 px-6">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${client.status === 'active'
-                        ? 'bg-green-50 text-green-700 border border-green-200'
-                        : client.status === 'trial'
-                          ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
-                          : 'bg-red-50 text-red-700 border border-red-200'
-                        }`}>
-                        {client.status === 'active' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                        {client.status}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${client.status === 'active'
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : client.status === 'trial'
+                            ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                            : 'bg-red-50 text-red-700 border border-red-200'
+                          }`}>
+                          {client.status === 'active' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                          {client.status}
+                        </span>
+                        {client.isPublished ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <Rocket className="w-2.5 h-2.5" /> Live
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                            Draft
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-4 px-6 text-gray-500 font-medium">
                       {new Date(client.createdAt).toLocaleDateString('en-IN')}
                     </td>
                     <td className="py-4 px-6 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
+                      <div className="flex items-center justify-center gap-1">
                         <button onClick={() => openModal('VIEW', client)} title="View Detail" className="p-1.5 text-sky-600 hover:bg-sky-50 rounded-md transition-colors">
                           <Eye className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => openModal('ONBOARDING', client)} title="7-Step Checklist & Launch" className="p-1.5 text-violet-600 hover:bg-violet-50 rounded-md transition-colors">
+                          <ClipboardCheck className="w-4 h-4" />
                         </button>
                         <button onClick={() => openModal('EDIT', client)} title="Edit Info" className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
                           <Edit className="w-4 h-4" />
                         </button>
-                        <button onClick={() => openModal('BRANDING', client)} title="Branding" className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-md transition-colors">
+                        <button onClick={() => openModal('BRANDING', client)} title="Branding & Assets" className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-md transition-colors">
                           <Palette className="w-4 h-4" />
                         </button>
                         <button onClick={() => openModal('FEATURES', client)} title="Features" className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors">
@@ -333,14 +454,14 @@ export default function Clients() {
                         <button onClick={() => openModal('CREATE_ADMIN', client)} title="Create Leader / Admin User" className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors">
                           <UserPlus className="w-4 h-4" />
                         </button>
-                        <div className="w-px h-5 bg-gray-200 mx-1"></div>
+                        <div className="w-px h-5 bg-gray-200 mx-0.5"></div>
                         <button onClick={() => handleImpersonate(client)} title="Login as Client" className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-md transition-colors">
                           <LogOut className="w-4 h-4" />
                         </button>
                         <button onClick={() => openModal('HISTORY', client)} title="Impersonation Logs" className="p-1.5 text-teal-600 hover:bg-teal-50 rounded-md transition-colors">
                           <History className="w-4 h-4" />
                         </button>
-                        <div className="w-px h-5 bg-gray-200 mx-1"></div>
+                        <div className="w-px h-5 bg-gray-200 mx-0.5"></div>
                         <button
                           onClick={() => openModal('SUSPEND', client)}
                           title={client.status === 'active' ? 'Suspend' : 'Activate'}
@@ -361,13 +482,14 @@ export default function Clients() {
       {/* MODAL */}
       {modalType && (
         <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col" style={{ maxHeight: '90vh' }}>
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 bg-gray-50/50">
               <h3 className="text-lg font-bold text-gray-900">
                 {modalType === 'VIEW' && 'Tenant Detail'}
+                {modalType === 'ONBOARDING' && `7-Step Onboarding Status — ${selectedClient?.name}`}
                 {modalType === 'ADD' && 'Register New Client'}
                 {modalType === 'EDIT' && 'Edit Client Info'}
-                {modalType === 'BRANDING' && 'Theme & Branding'}
+                {modalType === 'BRANDING' && 'Theme & Branding Assets'}
                 {modalType === 'FEATURES' && 'Enable / Disable Features'}
                 {modalType === 'CREATE_ADMIN' && `Create Leader / Admin — ${selectedClient?.name}`}
                 {modalType === 'HISTORY' && 'Impersonation Logs'}
@@ -379,7 +501,7 @@ export default function Clients() {
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto flex-1">
               {error && (
                 <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</div>
               )}
@@ -398,14 +520,27 @@ export default function Clients() {
                           <h4 className="font-bold text-gray-900 text-lg">{clientDetail.name}</h4>
                           <p className="text-xs text-gray-400 font-mono mt-0.5">{clientDetail._id}</p>
                         </div>
-                        <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${clientDetail.status === 'active' ? 'bg-green-50 text-green-700' : clientDetail.status === 'trial' ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'}`}>
-                          {clientDetail.status?.toUpperCase()}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${clientDetail.status === 'active' ? 'bg-green-50 text-green-700' : clientDetail.status === 'trial' ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'}`}>
+                            {clientDetail.status?.toUpperCase()}
+                          </span>
+                          {clientDetail.isPublished && (
+                            <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-100 text-emerald-800">
+                              LIVE
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {[
                         ['Slug', clientDetail.slug],
                         ['Custom Domain', clientDetail.customDomain || '—'],
+                        ['Contact Person', clientDetail.contactPerson || '—'],
+                        ['Mobile Number', clientDetail.mobileNumber || '—'],
+                        ['Email', clientDetail.email || '—'],
+                        ['Election Type', clientDetail.electionType ? clientDetail.electionType.replace('_', ' ').toUpperCase() : '—'],
                         ['Leader Name', clientDetail.branding?.leaderName || '—'],
+                        ['Platform Name', clientDetail.branding?.platformName || '—'],
+                        ['Launch Status', clientDetail.isPublished ? '🚀 Published (Live)' : 'Draft (Unpublished)'],
                         ['Tagline', clientDetail.branding?.tagline || '—'],
                         ['Primary Color', clientDetail.branding?.primaryColor || '—'],
                         ['Trial Ends', clientDetail.trialEndsAt ? new Date(clientDetail.trialEndsAt).toLocaleDateString('en-IN') : '—'],
@@ -418,6 +553,29 @@ export default function Clients() {
                           <span className="font-semibold text-gray-900">{value}</span>
                         </div>
                       ))}
+
+                      {/* Admin Login Credentials Section */}
+                      <div className="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+                        <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                          🔑 Admin Panel Login Credentials
+                        </p>
+                        {tenantAdminUsers.length === 0 ? (
+                          <p className="text-xs text-blue-400 italic">Koi admin user nahi mila. "Create Admin" se banayein.</p>
+                        ) : (
+                          tenantAdminUsers.map((admin, i) => (
+                            <div key={admin._id || i} className={`pb-3 ${i < tenantAdminUsers.length - 1 ? 'border-b border-blue-100 mb-3' : ''}`}>
+                              <div className="flex justify-between text-sm py-1">
+                                <span className="text-blue-600 font-medium">Login Email</span>
+                                <span className="font-bold text-blue-900 font-mono text-xs">{admin.email}</span>
+                              </div>
+                              <div className="flex justify-between text-sm py-1">
+                                <span className="text-blue-500 text-[11px]">Role</span>
+                                <span className="text-[11px] font-semibold text-blue-800 capitalize">{admin.role}</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
@@ -465,18 +623,210 @@ export default function Clients() {
                 </div>
               )}
 
+              {/* ONBOARDING STATUS & PUBLISH */}
+              {modalType === 'ONBOARDING' && (
+                <div className="space-y-4">
+                  {loadingOnboarding ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
+                      <p className="text-xs text-gray-500">Checking 7 onboarding steps...</p>
+                    </div>
+                  ) : !onboardingStatus ? (
+                    <div className="text-center py-8 text-sm text-gray-500">
+                      Status load nahi ho saka. Backend check karein.
+                    </div>
+                  ) : (
+                    <>
+                      {/* Progress Bar & Readiness Header */}
+                      <div className="bg-gradient-to-r from-slate-50 to-blue-50/50 p-4 rounded-xl border border-blue-100">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Setup Progress</span>
+                          <span className="text-sm font-black text-blue-700">{onboardingStatus.completionPercentage}% Complete</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                          <div
+                            className={`h-2.5 rounded-full transition-all duration-500 ${
+                              onboardingStatus.completionPercentage === 100
+                                ? 'bg-emerald-500'
+                                : onboardingStatus.completionPercentage >= 50
+                                ? 'bg-blue-600'
+                                : 'bg-amber-500'
+                            }`}
+                            style={{ width: `${onboardingStatus.completionPercentage}%` }}
+                          />
+                        </div>
+                        <div className="mt-3 flex items-center justify-between text-xs">
+                          <span className="text-gray-500">
+                            Platform Status:{' '}
+                            <strong className={onboardingStatus.isPublished ? 'text-emerald-700 font-bold' : 'text-slate-700 font-bold'}>
+                              {onboardingStatus.isPublished ? '🚀 Live & Published' : 'Draft (Unpublished)'}
+                            </strong>
+                          </span>
+                          {onboardingStatus.isReadyToPublish && !onboardingStatus.isPublished && (
+                            <span className="text-emerald-600 font-semibold flex items-center gap-1">
+                              <Check className="w-3.5 h-3.5" /> Ready to Launch
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 7 Steps List */}
+                      <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                        {onboardingStatus.steps &&
+                          Object.entries(onboardingStatus.steps).map(([key, stepInfo]) => (
+                            <div
+                              key={key}
+                              className={`p-3 rounded-lg border text-sm flex items-start justify-between transition-colors ${
+                                stepInfo.completed
+                                  ? 'bg-emerald-50/60 border-emerald-200/80 text-emerald-900'
+                                  : 'bg-gray-50 border-gray-200 text-gray-700'
+                              }`}
+                            >
+                              <div className="flex items-start gap-2.5">
+                                <div className="mt-0.5">
+                                  {stepInfo.completed ? (
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                  ) : (
+                                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="font-semibold text-xs text-gray-900 flex items-center gap-2">
+                                    <span>Step {stepInfo.step}: {stepInfo.name}</span>
+                                  </div>
+                                  {stepInfo.data && (
+                                    <p className="text-[11px] text-gray-500 mt-0.5 font-mono">
+                                      {stepInfo.step === 1 && (stepInfo.data.contactPerson ? `Contact: ${stepInfo.data.contactPerson} (${stepInfo.data.mobileNumber || ''})` : `Slug: ${stepInfo.data.slug}`)}
+                                      {stepInfo.step === 2 && (stepInfo.data.leaderName ? `Leader: ${stepInfo.data.leaderName}` : 'Colors/Logo pending')}
+                                      {stepInfo.step === 3 && (stepInfo.data.customDomain ? `Domain: ${stepInfo.data.customDomain}` : `Subdomain: ${stepInfo.data.subdomain}`)}
+                                      {stepInfo.step === 4 && `${stepInfo.data.enabledModulesCount || 0} module(s) active`}
+                                      {stepInfo.step === 5 && `${stepInfo.data.configuredLevelCount || 0} administrative level(s)`}
+                                      {stepInfo.step === 6 && `${stepInfo.data.fieldCount || 0} registration field(s)`}
+                                      {stepInfo.step === 7 && `${stepInfo.data.adminCount || 0} active admin account(s)`}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                                stepInfo.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-600'
+                              }`}>
+                                {stepInfo.completed ? 'Done' : 'Pending'}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+
+                      {/* Publish Platform Button */}
+                      <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                        <div className="text-xs text-gray-500">
+                          {onboardingStatus.isPublished
+                            ? 'Platform public access par live hai.'
+                            : 'Launch karne ke baad leader portal active ho jayega.'}
+                        </div>
+                        {!onboardingStatus.isPublished ? (
+                          <button
+                            onClick={() => handlePublishTenant(selectedClient._id)}
+                            disabled={saving}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors disabled:opacity-60"
+                          >
+                            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                            <span>Launch & Publish Platform</span>
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800">
+                            <Check className="w-3.5 h-3.5" /> Platform Published
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* ADD */}
               {modalType === 'ADD' && (
-                <div className="space-y-4">
+                <div className="space-y-3.5 max-h-[70vh] overflow-y-auto pr-1">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
-                    <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Rahul Kumar" onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Client / Party Name *</label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="e.g. Rahul Gandhi Campaign"
+                      value={form.name || ''}
+                      onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    />
                   </div>
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Subdomain (Slug)</label>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Subdomain (Slug) *</label>
                     <div className="flex">
-                      <input type="text" className="flex-1 border border-gray-300 rounded-l-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="rahulkumar" onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
-                      <span className="inline-flex items-center px-4 border border-l-0 border-gray-300 bg-gray-50 text-gray-500 text-sm rounded-r-lg">.madiyayu.com</span>
+                      <input
+                        type="text"
+                        className="flex-1 border border-gray-300 rounded-l-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="rahulgandhi"
+                        value={form.slug || ''}
+                        onChange={e => setForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
+                      />
+                      <span className="inline-flex items-center px-3 border border-l-0 border-gray-300 bg-gray-50 text-gray-500 text-xs font-mono rounded-r-lg">.madiyayu.com</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Leader / Candidate Name</label>
+                      <input
+                        type="text"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="e.g. Rahul Gandhi"
+                        value={form.leaderName || ''}
+                        onChange={e => setForm(f => ({ ...f, leaderName: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Election Type</label>
+                      <select
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                        value={form.electionType || 'lok_sabha'}
+                        onChange={e => setForm(f => ({ ...f, electionType: e.target.value }))}
+                      >
+                        {ELECTION_TYPES.map(et => (
+                          <option key={et.value} value={et.value}>{et.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Campaign Manager / Contact Person</label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="e.g. Amit Sharma (Office Head)"
+                      value={form.contactPerson || ''}
+                      onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Contact Mobile Number</label>
+                      <input
+                        type="tel"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="e.g. 9876543210"
+                        value={form.mobileNumber || ''}
+                        onChange={e => setForm(f => ({ ...f, mobileNumber: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Official Email</label>
+                      <input
+                        type="email"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="e.g. office@campaign.com"
+                        value={form.email || ''}
+                        onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                      />
                     </div>
                   </div>
                 </div>
@@ -484,26 +834,94 @@ export default function Clients() {
 
               {/* EDIT */}
               {modalType === 'EDIT' && (
-                <div className="space-y-4">
+                <div className="space-y-3.5 max-h-[70vh] overflow-y-auto pr-1">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
-                    <input type="text" value={form.name || ''} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none" onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Client Name</label>
+                    <input
+                      type="text"
+                      value={form.name || ''}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Custom Domain</label>
-                    <input type="text" value={form.customDomain || ''} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. rahulkumar.in" onChange={e => setForm(f => ({ ...f, customDomain: e.target.value }))} />
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Custom Domain</label>
+                    <input
+                      type="text"
+                      value={form.customDomain || ''}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="e.g. rahulkumar.in"
+                      onChange={e => setForm(f => ({ ...f, customDomain: e.target.value }))}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Election Type</label>
+                      <select
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                        value={form.electionType || 'other'}
+                        onChange={e => setForm(f => ({ ...f, electionType: e.target.value }))}
+                      >
+                        {ELECTION_TYPES.map(et => (
+                          <option key={et.value} value={et.value}>{et.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Contact Person</label>
+                      <input
+                        type="text"
+                        value={form.contactPerson || ''}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="e.g. In-charge Name"
+                        onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Mobile Number</label>
+                      <input
+                        type="tel"
+                        value={form.mobileNumber || ''}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="10-digit number"
+                        onChange={e => setForm(f => ({ ...f, mobileNumber: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={form.email || ''}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        placeholder="email@domain.com"
+                        onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* BRANDING */}
               {modalType === 'BRANDING' && (
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Platform / App Name</label>
+                    <input
+                      type="text"
+                      value={form.platformName || ''}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                      placeholder="e.g. Rahul Gandhi Digital Campaign"
+                      onChange={e => setForm(f => ({ ...f, platformName: e.target.value }))}
+                    />
+                  </div>
+
                   {/* Party / Campaign Logo */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Party / Campaign Logo</label>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Party / Campaign Logo</label>
                     <div className="flex items-center gap-4 p-3 bg-gray-50 border border-gray-200 rounded-xl">
-                      <div className="w-16 h-16 rounded-xl border border-dashed border-gray-300 bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+                      <div className="w-14 h-14 rounded-xl border border-dashed border-gray-300 bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
                         {form.logoUrl ? (
                           <img
                             src={form.logoUrl.startsWith('http') ? form.logoUrl : `http://localhost:3001${form.logoUrl}`}
@@ -512,7 +930,7 @@ export default function Clients() {
                             onError={(e) => { e.target.src = 'https://placehold.co/100x100?text=Logo'; }}
                           />
                         ) : (
-                          <Image className="w-7 h-7 text-gray-300" />
+                          <Image className="w-6 h-6 text-gray-300" />
                         )}
                       </div>
 
@@ -541,31 +959,105 @@ export default function Clients() {
                             </button>
                           )}
                         </div>
-                        <p className="text-[11px] text-gray-400 mt-1">PNG, JPG, or WebP (e.g. Party symbol)</p>
+                        <p className="text-[11px] text-gray-400 mt-1">Party symbol or campaign logo</p>
                       </div>
                     </div>
                   </div>
 
+                  {/* Leader / Candidate Photo */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Leader Name</label>
-                    <input type="text" value={form.leaderName || ''} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="e.g. Narendra Kumar" onChange={e => setForm(f => ({ ...f, leaderName: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tagline / Slogan</label>
-                    <input type="text" value={form.tagline || ''} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="e.g. Vikas Ki Nayi Udaan" onChange={e => setForm(f => ({ ...f, tagline: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Primary Color</label>
-                    <div className="flex items-center gap-3 p-2 border border-gray-200 rounded-lg bg-gray-50">
-                      <input type="color" value={form.primaryColor || '#2563EB'} className="h-8 w-8 rounded cursor-pointer border-0 p-0 bg-transparent" onChange={e => setForm(f => ({ ...f, primaryColor: e.target.value }))} />
-                      <span className="text-sm font-mono text-gray-700">{form.primaryColor || '#2563EB'}</span>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Leader / Candidate Photo</label>
+                    <div className="flex items-center gap-4 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                      <div className="w-14 h-14 rounded-full border border-dashed border-gray-300 bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+                        {form.leaderPhotoUrl ? (
+                          <img
+                            src={form.leaderPhotoUrl.startsWith('http') ? form.leaderPhotoUrl : `http://localhost:3001${form.leaderPhotoUrl}`}
+                            alt="Leader Preview"
+                            className="w-full h-full object-cover"
+                            onError={(e) => { e.target.src = 'https://placehold.co/100x100?text=Leader'; }}
+                          />
+                        ) : (
+                          <User className="w-6 h-6 text-gray-300" />
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg text-xs font-semibold text-gray-700 cursor-pointer shadow-xs transition-colors">
+                            {uploadingLeaderPhoto ? <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" /> : <Upload className="w-3.5 h-3.5 text-purple-600" />}
+                            <span>{uploadingLeaderPhoto ? 'Uploading...' : 'Upload Photo'}</span>
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              className="hidden"
+                              disabled={uploadingLeaderPhoto}
+                              onChange={handleLeaderPhotoUpload}
+                            />
+                          </label>
+
+                          {form.leaderPhotoUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, leaderPhotoUrl: '' }))}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Remove Photo"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1">Candidate portrait photo (square or circle)</p>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Secondary Color</label>
-                    <div className="flex items-center gap-3 p-2 border border-gray-200 rounded-lg bg-gray-50">
-                      <input type="color" value={form.secondaryColor || '#F59E0B'} className="h-8 w-8 rounded cursor-pointer border-0 p-0 bg-transparent" onChange={e => setForm(f => ({ ...f, secondaryColor: e.target.value }))} />
-                      <span className="text-sm font-mono text-gray-700">{form.secondaryColor || '#F59E0B'}</span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Leader Name</label>
+                      <input
+                        type="text"
+                        value={form.leaderName || ''}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                        placeholder="e.g. Narendra Kumar"
+                        onChange={e => setForm(f => ({ ...f, leaderName: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Tagline / Slogan</label>
+                      <input
+                        type="text"
+                        value={form.tagline || ''}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                        placeholder="e.g. Vikas Ki Nayi Udaan"
+                        onChange={e => setForm(f => ({ ...f, tagline: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Primary Color</label>
+                      <div className="flex items-center gap-3 p-2 border border-gray-200 rounded-lg bg-gray-50">
+                        <input
+                          type="color"
+                          value={form.primaryColor || '#2563EB'}
+                          className="h-8 w-8 rounded cursor-pointer border-0 p-0 bg-transparent"
+                          onChange={e => setForm(f => ({ ...f, primaryColor: e.target.value }))}
+                        />
+                        <span className="text-xs font-mono font-bold text-gray-700">{form.primaryColor || '#2563EB'}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Secondary Color</label>
+                      <div className="flex items-center gap-3 p-2 border border-gray-200 rounded-lg bg-gray-50">
+                        <input
+                          type="color"
+                          value={form.secondaryColor || '#F59E0B'}
+                          className="h-8 w-8 rounded cursor-pointer border-0 p-0 bg-transparent"
+                          onChange={e => setForm(f => ({ ...f, secondaryColor: e.target.value }))}
+                        />
+                        <span className="text-xs font-mono font-bold text-gray-700">{form.secondaryColor || '#F59E0B'}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -688,9 +1180,9 @@ export default function Clients() {
               {/* Footer Buttons */}
               <div className="mt-6 flex justify-end gap-3 pt-5 border-t border-gray-100">
                 <button onClick={closeModal} className="px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors">
-                  {modalType === 'HISTORY' || modalType === 'FEATURES' || modalType === 'VIEW' || modalType === 'IMPERSONATE_RESULT' ? 'Close' : 'Cancel'}
+                  {modalType === 'HISTORY' || modalType === 'FEATURES' || modalType === 'VIEW' || modalType === 'IMPERSONATE_RESULT' || modalType === 'ONBOARDING' ? 'Close' : 'Cancel'}
                 </button>
-                {modalType !== 'HISTORY' && modalType !== 'FEATURES' && modalType !== 'VIEW' && modalType !== 'IMPERSONATE_RESULT' && (
+                {modalType !== 'HISTORY' && modalType !== 'FEATURES' && modalType !== 'VIEW' && modalType !== 'IMPERSONATE_RESULT' && modalType !== 'ONBOARDING' && (
                   <button
                     onClick={handleConfirm}
                     disabled={saving}
