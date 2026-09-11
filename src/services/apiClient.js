@@ -1,8 +1,7 @@
 import axios from 'axios';
 
-// Create an Axios instance with base configuration
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001',
+  baseURL: (import.meta.env.VITE_API_BASE_URL || 'https://election.digicoders.in').replace(/\/+$/, ''),
   headers: {
     'Content-Type': 'application/json',
   },

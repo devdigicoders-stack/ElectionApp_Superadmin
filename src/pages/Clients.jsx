@@ -60,11 +60,15 @@ const INDIAN_STATES = [
   'Dadra & Nagar Haveli', 'Daman & Diu', 'Lakshadweep', 'Puducherry', 'Andaman & Nicobar',
 ];
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001').replace(/\/+$/, '');
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'https://election.digicoders.in').replace(/\/+$/, '');
 
 function resolveImageUrl(url) {
-  if (!url) return '';
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/')) return url;
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('data:image/') || url.startsWith('blob:')) return url;
+  if (url.includes('localhost:3001')) {
+    return url.replace(/http:\/\/localhost:3001/g, API_BASE_URL);
+  }
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
   const cleanPath = url.startsWith('/') ? url : `/${url}`;
   return `${API_BASE_URL}${cleanPath}`;
 }

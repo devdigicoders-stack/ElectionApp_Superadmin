@@ -20,11 +20,17 @@ const BRAND_COLOR_PRESETS = [
   { name: 'Sovereign Purple', primary: '#4C1D95', secondary: '#EC4899', accent: '#8B5CF6' },
 ];
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'https://election.digicoders.in').replace(/\/+$/, '');
+
 function resolveAssetUrl(url) {
-  if (!url) return '';
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/')) return url;
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('data:image/') || url.startsWith('blob:')) return url;
+  if (url.includes('localhost:3001')) {
+    return url.replace(/http:\/\/localhost:3001/g, API_BASE_URL);
+  }
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
   const clean = url.startsWith('/') ? url : `/${url}`;
-  return `http://localhost:3001${clean}`;
+  return `${API_BASE_URL}${clean}`;
 }
 
 const STEPS = [
@@ -807,13 +813,18 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
   async function handleLogoUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const localBlob = URL.createObjectURL(file);
+    setForm(f => ({
+      ...f,
+      branding: { ...f.branding, logoUrl: localBlob },
+    }));
     try {
       setUploadingLogo(true);
       setError('');
       const path = await tenantsService.uploadLogo(file);
       setForm(f => ({
         ...f,
-        branding: { ...f.branding, logoUrl: path },
+        branding: { ...f.branding, logoUrl: path || localBlob },
       }));
     } catch (err) {
       setError(err?.response?.data?.message || 'Logo upload failed');
@@ -826,13 +837,18 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
   async function handleLeaderPhotoUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const localBlob = URL.createObjectURL(file);
+    setForm(f => ({
+      ...f,
+      branding: { ...f.branding, leaderPhotoUrl: localBlob },
+    }));
     try {
       setUploadingPhoto(true);
       setError('');
       const path = await tenantsService.uploadAsset('branding', file);
       setForm(f => ({
         ...f,
-        branding: { ...f.branding, leaderPhotoUrl: path },
+        branding: { ...f.branding, leaderPhotoUrl: path || localBlob },
       }));
     } catch (err) {
       setError(err?.response?.data?.message || 'Photo upload failed');
@@ -1648,6 +1664,7 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
                               src={resolveAssetUrl(form.branding.logoUrl)}
                               alt="Logo"
                               className="w-7 h-7 object-contain bg-white/10 rounded p-0.5"
+                              onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x100/f3f4f6/6b7280?text=Logo'; }}
                             />
                           ) : (
                             <Building2 className="w-6 h-6 text-white/80 shrink-0" />
@@ -1667,6 +1684,7 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
                             src={resolveAssetUrl(form.branding.leaderPhotoUrl)}
                             alt="Leader"
                             className="w-7 h-7 rounded-full object-cover ring-1 ring-white/40 shrink-0"
+                            onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/100x100/f3f4f6/6b7280?text=Leader'; }}
                           />
                         ) : (
                           <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold text-white shrink-0">
@@ -1904,6 +1922,10 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
                           src={resolveAssetUrl(form.branding.logoUrl)}
                           alt="Logo"
                           className="w-full h-full object-contain p-1"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = 'https://placehold.co/100x100/f3f4f6/6b7280?text=Logo';
+                          }}
                         />
                       ) : (
                         <Building2 className="w-6 h-6 text-gray-300" />
@@ -1946,6 +1968,10 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
                           src={resolveAssetUrl(form.branding.leaderPhotoUrl)}
                           alt="Leader"
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = 'https://placehold.co/100x100/f3f4f6/6b7280?text=Leader';
+                          }}
                         />
                       ) : (
                         <UserCheck className="w-6 h-6 text-gray-300" />
