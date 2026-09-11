@@ -7,7 +7,7 @@ import {
   Search, Building2, Globe, Layers, MapPin, FileText, UserCheck,
   ExternalLink, Sparkles, Copy, Key, RefreshCw, MoreHorizontal, Smartphone,
   Video, Film, Shield, Users, MessageSquare, Calendar, Vote, ChevronDown, ChevronRight,
-  BarChart3, Download
+  BarChart3, Download, HardDrive
 } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import exportsService from '../services/exports.service';
