@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import Swal from 'sweetalert2';
-import apiClient from '../services/apiClient';
-import { onForegroundMessage, requestNotificationPermissionAndGetToken } from '../config/firebase';
-import { playNotificationSound } from '../utils/sound';
+import NotificationBellDropdown from '../components/NotificationBellDropdown';
 import { 
   LayoutDashboard, Users, CreditCard, Layers, Palette, 
   UserCircle, BarChart3, Plug, ScrollText, Settings, 
@@ -104,48 +101,8 @@ export function hasPermission(item, admin) {
 
 export default function AdminLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
-  const [alertCount, setAlertCount] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
-
-  // Dynamically sync active operational warnings count for top header bell
-  useEffect(() => {
-    apiClient.get('/super-admin/dashboard/alerts')
-      .then(res => {
-        const data = res.data?.data || res.data;
-        const count = (data?.criticalCount || 0) + (data?.warningCount || 0);
-        setAlertCount(count);
-      })
-      .catch(() => setAlertCount(0));
-  }, [location.pathname]);
-
-  // Foreground Firebase Push Notification Listener
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      requestNotificationPermissionAndGetToken();
-    }
-
-    onForegroundMessage((payload) => {
-      const title = payload.notification?.title || payload.data?.title || 'System Notification';
-      const body = payload.notification?.body || payload.data?.body || '';
-
-      // Play dynamic notification ringtone chime
-      playNotificationSound('crystal');
-
-      setAlertCount((c) => c + 1);
-
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'info',
-        title: title,
-        text: body,
-        showConfirmButton: false,
-        timer: 6000,
-        timerProgressBar: true,
-      });
-    });
-  }, []);
 
   // Close sidebar on mobile when route changes
   useEffect(() => {
@@ -285,18 +242,8 @@ export default function AdminLayout() {
           {/* Right Icons & Profile */}
           <div className="flex items-center gap-3 sm:gap-6">
             
-            <button 
-              onClick={() => navigate('/dashboard')}
-              title={alertCount > 0 ? `${alertCount} active operational alerts` : 'System Alerts'}
-              className="relative p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-50 transition-colors cursor-pointer"
-            >
-              <Bell className="w-5 h-5" />
-              {alertCount > 0 && (
-                <span className="absolute top-1 right-1 px-1 py-0.2 min-w-[16px] h-[16px] bg-red-500 rounded-full border-2 border-white text-[9px] text-white flex items-center justify-center font-black animate-pulse">
-                  {alertCount > 9 ? '9+' : alertCount}
-                </span>
-              )}
-            </button>
+            {/* Fully Dynamic Notification Bell with Dropdown Center */}
+            <NotificationBellDropdown />
 
             <div className="h-8 w-px bg-gray-200 hidden sm:block"></div>
 
