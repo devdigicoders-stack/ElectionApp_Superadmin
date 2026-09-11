@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Firebase credentials & sensitive JSON
+*firebase-adminsdk*.json
+service-account*.json
+*.pdf
+missing.txt

@@ -13,6 +13,9 @@ import Usage from './pages/Usage';
 import Notifications from './pages/Notifications';
 import AuditLogs from './pages/AuditLogs';
 import Profile from './pages/Profile';
+import MasterAreas from './pages/MasterAreas';
+import Exports from './pages/Exports';
+import PlatformSettings from './pages/Settings';
 
 // Protected Route — bina token ke andar nahi jaane deta
 function ProtectedRoute({ children }) {
@@ -91,6 +94,7 @@ function App() {
         >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/clients" element={<PermissionRoute permission="tenants:read"><Clients /></PermissionRoute>} />
+          <Route path="/master-areas" element={<PermissionRoute permission="tenants:read"><MasterAreas /></PermissionRoute>} />
           <Route path="/plans" element={<PermissionRoute permission="plans:read"><Plans /></PermissionRoute>} />
           <Route path="/subscriptions" element={<PermissionRoute permission="subscriptions:read"><Subscriptions /></PermissionRoute>} />
           <Route path="/domains" element={<PermissionRoute permission="tenants:domain"><Domains /></PermissionRoute>} />
@@ -98,6 +102,8 @@ function App() {
           <Route path="/usage" element={<PermissionRoute permission="usage:read"><Usage /></PermissionRoute>} />
           <Route path="/notifications" element={<PermissionRoute permission="system:health"><Notifications /></PermissionRoute>} />
           <Route path="/audit-logs" element={<PermissionRoute permission="audit_logs:read"><AuditLogs /></PermissionRoute>} />
+          <Route path="/exports" element={<PermissionRoute permission="exports:read"><Exports /></PermissionRoute>} />
+          <Route path="/settings" element={<PermissionRoute requiredRole="super_admin"><PlatformSettings /></PermissionRoute>} />
           <Route path="/profile" element={<Profile />} />
         </Route>
 

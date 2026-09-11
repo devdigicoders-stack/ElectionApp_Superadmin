@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Receipt, Plus, Eye, RefreshCw, ArrowUpCircle,
   Clock, PauseCircle, PlayCircle, XCircle, AlertCircle,
-  IndianRupee, Activity, TrendingUp, X, Loader2, FileText
+  IndianRupee, Activity, TrendingUp, X, Loader2, FileText, Printer
 } from 'lucide-react';
 import subscriptionsService from '../services/subscriptions.service';
 import plansService from '../services/plans.service';
@@ -32,6 +32,438 @@ function fmt(date) {
   return new Date(date).toLocaleDateString('en-IN');
 }
 
+/** Convert number to Indian-English words */
+function numberToWords(num) {
+  if (!num || isNaN(num)) return 'Zero';
+  const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  function words(n) {
+    if (n < 20) return a[n];
+    if (n < 100) return b[Math.floor(n/10)] + (n%10 ? ' ' + a[n%10] : '');
+    if (n < 1000) return a[Math.floor(n/100)] + ' Hundred' + (n%100 ? ' ' + words(n%100) : '');
+    if (n < 100000) return words(Math.floor(n/1000)) + ' Thousand' + (n%1000 ? ' ' + words(n%1000) : '');
+    if (n < 10000000) return words(Math.floor(n/100000)) + ' Lakh' + (n%100000 ? ' ' + words(n%100000) : '');
+    return words(Math.floor(n/10000000)) + ' Crore' + (n%10000000 ? ' ' + words(n%10000000) : '');
+  }
+  const [rupees, paise] = num.toFixed(2).split('.');
+  let result = words(parseInt(rupees)) + ' Rupees';
+  if (parseInt(paise) > 0) result += ' and ' + words(parseInt(paise)) + ' Paise';
+  return result + ' Only';
+}
+
+/** Full GST Tax Invoice Modal */
+function GstInvoiceModal({ sub, onClose }) {
+  const printRef = useRef();
+  if (!sub) return null;
+
+  const s = sub;
+  const isInterState = s.isInterState || false;
+  const taxRate = s.taxRate ?? 18;
+  const amountPaid = s.amountPaid || 0;
+
+  // Compute from stored fields or recalculate fallback
+  const taxableAmount = s.taxableAmount || Math.round((amountPaid / (1 + taxRate / 100)) * 100) / 100;
+  const totalTax = Math.round((amountPaid - taxableAmount) * 100) / 100;
+  const cgst = isInterState ? 0 : (s.cgst ?? Math.round((totalTax / 2) * 100) / 100);
+  const sgst = isInterState ? 0 : (s.sgst ?? Math.round((totalTax / 2) * 100) / 100);
+  const igst = isInterState ? (s.igst ?? totalTax) : 0;
+  const totalAmount = s.totalAmount || amountPaid;
+
+  const invoiceDate = s.createdAt ? new Date(s.createdAt) : new Date();
+  const sacCode = s.sacCode || '998313';
+  const planName = s.planId?.name || 'Subscription Plan';
+  const tenantName = s.tenantId?.name || 'Client';
+  const tenantSlug = s.tenantId?.slug || '';
+  const clientGstin = s.clientGstin || 'Unregistered';
+  const clientState = s.clientState || '—';
+  const clientAddress = s.clientAddress || '—';
+  const invoiceType = s.invoiceType || 'tax_invoice';
+
+  const invoiceTypeLabel = {
+    tax_invoice: 'TAX INVOICE',
+    proforma: 'PROFORMA INVOICE',
+    credit_note: 'CREDIT NOTE',
+  }[invoiceType] || 'TAX INVOICE';
+
+  function handlePrint() {
+    const w = window.open('', '_blank', 'width=900,height=700');
+    w.document.write(`<!DOCTYPE html><html><head>
+      <title>${s.invoiceNumber} - Tax Invoice</title>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Inter',sans-serif; font-size:13px; color:#111; background:#fff; }
+        .page { width:210mm; min-height:297mm; margin:0 auto; padding:16mm 14mm; }
+        .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid #4f46e5; padding-bottom:12px; margin-bottom:16px; }
+        .brand { font-size:22px; font-weight:800; color:#4f46e5; letter-spacing:-0.5px; }
+        .brand-sub { font-size:11px; color:#6b7280; margin-top:2px; }
+        .invoice-title { text-align:right; }
+        .invoice-title h2 { font-size:18px; font-weight:800; color:#111; }
+        .invoice-title .inv-num { font-size:13px; color:#6b7280; margin-top:4px; }
+        .invoice-title .inv-date { font-size:12px; color:#6b7280; }
+        .parties { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:20px; }
+        .party-box { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:12px 14px; }
+        .party-label { font-size:10px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; }
+        .party-name { font-size:15px; font-weight:700; color:#111; margin-bottom:3px; }
+        .party-detail { font-size:11px; color:#6b7280; line-height:1.6; }
+        .party-gstin { font-size:11px; font-weight:600; color:#374151; margin-top:4px; }
+        table { width:100%; border-collapse:collapse; margin-bottom:0; }
+        thead tr { background:#4f46e5; color:#fff; }
+        thead th { padding:9px 10px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; }
+        tbody tr { border-bottom:1px solid #f3f4f6; }
+        tbody td { padding:10px 10px; font-size:12px; color:#374151; }
+        .tax-table { margin-top:16px; }
+        .tax-table td { padding:7px 10px; }
+        .total-row td { background:#f0f9ff; font-weight:700; font-size:13px; }
+        .grand-total-row td { background:#4f46e5; color:#fff; font-weight:800; font-size:14px; }
+        .words-box { margin-top:12px; background:#fefce8; border:1px solid #fde68a; border-radius:6px; padding:10px 14px; font-size:12px; color:#78350f; }
+        .footer { margin-top:auto; padding-top:20px; border-top:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:flex-end; }
+        .seal { text-align:right; }
+        .seal-line { margin-top:48px; border-top:1px solid #374151; padding-top:4px; font-size:11px; color:#374151; }
+        .badge { display:inline-block; background:#dcfce7; color:#166534; border:1px solid #bbf7d0; border-radius:4px; font-size:10px; font-weight:700; padding:2px 8px; margin-bottom:8px; }
+        .sac-note { font-size:10px; color:#9ca3af; margin-top:8px; }
+        @media print { .page { padding:10mm; } }
+      </style>
+    </head><body><div class="page">
+      <div class="header">
+        <div>
+          <div class="brand">🗳️ Madiyayu Platform</div>
+          <div class="brand-sub">Political Engagement SaaS</div>
+          <div class="brand-sub" style="margin-top:6px">GSTIN: 27AABCU9603R1ZX</div>
+          <div class="brand-sub">SAC Code: ${sacCode} | HSN: IT Software Services</div>
+          <div class="brand-sub">State: Maharashtra (27) | support@madiyayu.com</div>
+        </div>
+        <div class="invoice-title">
+          <div class="badge">${invoiceTypeLabel}</div>
+          <div class="inv-num">${s.invoiceNumber}</div>
+          <div class="inv-date">Date: ${invoiceDate.toLocaleDateString('en-IN', { day:'2-digit', month:'long', year:'numeric' })}</div>
+          <div class="inv-date" style="margin-top:4px">Period: ${fmt(s.startDate)} — ${fmt(s.endDate)}</div>
+        </div>
+      </div>
+
+      <div class="parties">
+        <div class="party-box">
+          <div class="party-label">Bill From (Supplier)</div>
+          <div class="party-name">Madiyayu Technologies Pvt. Ltd.</div>
+          <div class="party-detail">123, Business Hub, BKC, Mumbai — 400051<br/>Maharashtra, India</div>
+          <div class="party-gstin">GSTIN: 27AABCU9603R1ZX</div>
+        </div>
+        <div class="party-box">
+          <div class="party-label">Bill To (Recipient)</div>
+          <div class="party-name">${tenantName}</div>
+          <div class="party-detail">${clientAddress.replace(/\n/g,'<br/>')}<br/>State: ${clientState}</div>
+          <div class="party-gstin">GSTIN: ${clientGstin}</div>
+          <div class="party-detail" style="margin-top:4px">Client ID: ${tenantSlug}</div>
+        </div>
+      </div>
+
+      <table>
+        <thead><tr>
+          <th style="width:40px">#</th>
+          <th>Description of Service</th>
+          <th>SAC</th>
+          <th>Billing Cycle</th>
+          <th style="text-align:right">Taxable Amt (₹)</th>
+        </tr></thead>
+        <tbody><tr>
+          <td>1</td>
+          <td><strong>${planName}</strong><br/><span style="font-size:11px;color:#6b7280">SaaS Subscription — Political Engagement Platform</span></td>
+          <td>${sacCode}</td>
+          <td>${s.billingCycle}</td>
+          <td style="text-align:right"><strong>${taxableAmount.toLocaleString('en-IN', { minimumFractionDigits:2 })}</strong></td>
+        </tr></tbody>
+      </table>
+
+      <table class="tax-table">
+        <tbody>
+          <tr><td style="color:#6b7280">Taxable Amount</td><td></td><td style="text-align:right">₹${taxableAmount.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>
+          ${isInterState
+            ? `<tr><td>IGST @ ${taxRate}%</td><td style="color:#6b7280">(Inter-State Supply)</td><td style="text-align:right">₹${igst.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>`
+            : `<tr><td>CGST @ ${taxRate/2}%</td><td style="color:#6b7280">(Intra-State Supply)</td><td style="text-align:right">₹${cgst.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>
+               <tr><td>SGST @ ${taxRate/2}%</td><td style="color:#6b7280">(Intra-State Supply)</td><td style="text-align:right">₹${sgst.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>`
+          }
+          <tr class="grand-total-row"><td colspan="2"><strong>GRAND TOTAL (INR)</strong></td><td style="text-align:right"><strong>₹${totalAmount.toLocaleString('en-IN',{minimumFractionDigits:2})}</strong></td></tr>
+        </tbody>
+      </table>
+
+      <div class="words-box">
+        <strong>Amount in Words:</strong> ${numberToWords(totalAmount)}
+      </div>
+
+      <div class="sac-note">SAC ${sacCode}: Software-related services including development, implementation, customisation, upgrade, and maintenance of IT Software.</div>
+
+      <div class="footer">
+        <div>
+          <div style="font-size:11px;color:#6b7280">Payment Method: ${s.paymentMethod || '—'}</div>
+          <div style="font-size:11px;color:#6b7280">Transaction Ref: ${s.paymentReference || '—'}</div>
+          ${s.notes ? `<div style="font-size:11px;color:#6b7280;margin-top:4px">Notes: ${s.notes}</div>` : ''}
+          <div style="margin-top:12px;font-size:10px;color:#9ca3af">This is a computer-generated invoice and does not require a physical signature.</div>
+        </div>
+        <div class="seal">
+          <div style="font-size:11px;color:#6b7280">For Madiyayu Technologies Pvt. Ltd.</div>
+          <div class="seal-line">Authorised Signatory</div>
+        </div>
+      </div>
+    </div></body></html>`);
+    w.document.close();
+    setTimeout(() => { w.print(); }, 500);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-indigo-600 rounded-t-2xl shrink-0">
+          <div className="flex items-center gap-3">
+            <FileText className="w-5 h-5 text-white" />
+            <div>
+              <h3 className="text-base font-bold text-white">{invoiceTypeLabel}</h3>
+              <p className="text-xs text-indigo-200">{s.invoiceNumber}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={handlePrint} className="flex items-center gap-1.5 bg-white text-indigo-700 hover:bg-indigo-50 font-bold text-xs px-3 py-2 rounded-lg transition-colors">
+              <Printer className="w-4 h-4" /> Print / Download
+            </button>
+            <button onClick={onClose} className="text-indigo-200 hover:text-white p-1 rounded-md">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Invoice Body */}
+        <div className="overflow-y-auto flex-1 p-6 space-y-5" ref={printRef}>
+          {/* Parties */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+              <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-2">Bill From</p>
+              <p className="font-bold text-gray-900 text-sm">Madiyayu Technologies Pvt. Ltd.</p>
+              <p className="text-xs text-gray-500 mt-1">123, Business Hub, BKC, Mumbai</p>
+              <p className="text-xs text-gray-500">Maharashtra, India — 400051</p>
+              <p className="text-xs font-semibold text-gray-700 mt-2">GSTIN: 27AABCU9603R1ZX</p>
+              <p className="text-xs text-gray-500">SAC: {sacCode}</p>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Bill To</p>
+              <p className="font-bold text-gray-900 text-sm">{tenantName}</p>
+              <p className="text-xs text-gray-500 mt-1">{clientAddress || '—'}</p>
+              <p className="text-xs text-gray-500">{clientState}</p>
+              <p className="text-xs font-semibold text-gray-700 mt-2">GSTIN: {clientGstin}</p>
+            </div>
+          </div>
+
+          {/* Invoice Meta */}
+          <div className="grid grid-cols-3 gap-3">
+            {[['Invoice No.', s.invoiceNumber], ['Invoice Date', invoiceDate.toLocaleDateString('en-IN')], ['Supply Type', isInterState ? 'Inter-State (IGST)' : 'Intra-State (CGST+SGST)'],
+              ['Period Start', fmt(s.startDate)], ['Period End', fmt(s.endDate)], ['Payment Method', s.paymentMethod || '—']].map(([k,v]) => (
+              <div key={k} className="bg-gray-50 border border-gray-100 rounded-lg p-3">
+                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">{k}</p>
+                <p className="text-xs font-semibold text-gray-800">{v}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Service Line */}
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="bg-gray-800 text-white grid grid-cols-12 px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider">
+              <div className="col-span-1">#</div>
+              <div className="col-span-5">Service Description</div>
+              <div className="col-span-2">SAC Code</div>
+              <div className="col-span-2">Cycle</div>
+              <div className="col-span-2 text-right">Taxable (₹)</div>
+            </div>
+            <div className="grid grid-cols-12 px-4 py-3.5 text-sm border-t border-gray-100">
+              <div className="col-span-1 text-gray-400">1</div>
+              <div className="col-span-5">
+                <p className="font-bold text-gray-900">{planName}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Political SaaS Subscription</p>
+              </div>
+              <div className="col-span-2 text-xs text-gray-600 font-mono">{sacCode}</div>
+              <div className="col-span-2 text-xs text-gray-600">{s.billingCycle}</div>
+              <div className="col-span-2 text-right font-bold text-gray-900">₹{taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+            </div>
+          </div>
+
+          {/* Tax Breakdown */}
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="bg-gray-50 px-4 py-2.5 text-[10px] font-bold uppercase text-gray-500 tracking-wider border-b border-gray-200">GST Breakdown</div>
+            <div className="divide-y divide-gray-100">
+              <div className="flex justify-between px-4 py-2.5 text-sm">
+                <span className="text-gray-500">Taxable Amount</span>
+                <span className="font-semibold text-gray-800">₹{taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+              {isInterState ? (
+                <div className="flex justify-between px-4 py-2.5 text-sm">
+                  <span className="text-gray-500">IGST @ {taxRate}% <span className="text-xs text-gray-400">(Inter-State)</span></span>
+                  <span className="font-semibold text-orange-700">₹{igst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between px-4 py-2.5 text-sm">
+                    <span className="text-gray-500">CGST @ {taxRate / 2}% <span className="text-xs text-gray-400">(Central)</span></span>
+                    <span className="font-semibold text-blue-700">₹{cgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between px-4 py-2.5 text-sm">
+                    <span className="text-gray-500">SGST @ {taxRate / 2}% <span className="text-xs text-gray-400">(State)</span></span>
+                    <span className="font-semibold text-purple-700">₹{sgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between px-4 py-3 bg-indigo-600 text-white">
+                <span className="font-bold text-sm">GRAND TOTAL (INR)</span>
+                <span className="font-extrabold text-lg">₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Amount in Words */}
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
+            <p className="text-[10px] font-bold text-yellow-700 uppercase tracking-wider mb-1">Amount in Words</p>
+            <p className="text-sm font-semibold text-yellow-900">{numberToWords(totalAmount)}</p>
+          </div>
+
+          {/* Payment + Notes */}
+          {(s.paymentReference || s.notes) && (
+            <div className="grid grid-cols-2 gap-3">
+              {s.paymentReference && (
+                <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Transaction Ref</p>
+                  <p className="text-xs font-mono font-semibold text-gray-800">{s.paymentReference}</p>
+                </div>
+              )}
+              {s.notes && (
+                <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Notes</p>
+                  <p className="text-xs text-gray-700">{s.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <p className="text-center text-[10px] text-gray-400 pt-2">This is a computer-generated invoice. SAC {sacCode}: IT Software Subscription Services.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const INDIAN_STATES = [
+  'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat',
+  'Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh',
+  'Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab',
+  'Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh',
+  'Uttarakhand','West Bengal','Delhi','Jammu & Kashmir','Ladakh','Chandigarh',
+  'Dadra & Nagar Haveli','Daman & Diu','Lakshadweep','Puducherry','Andaman & Nicobar',
+];
+
+/** Reusable GST fields block for Create / Renew forms */
+function GstFormSection({ form, setForm, accentColor = 'indigo' }) {
+  const r = accentColor;
+  return (
+    <div className="bg-indigo-50/60 border border-indigo-200/70 rounded-xl p-3.5 space-y-3">
+      <p className="text-[10px] font-black text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+        <FileText className="w-3 h-3" /> GST / Tax Invoice Details (SRS Sec 46.2)
+      </p>
+
+      {/* GSTIN + State */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Client GSTIN <span className="font-normal text-gray-400">(optional)</span></label>
+          <input
+            type="text"
+            maxLength={15}
+            value={form.clientGstin || ''}
+            onChange={e => setForm(f => ({ ...f, clientGstin: e.target.value.toUpperCase() }))}
+            placeholder="27AABCU9603R1ZX"
+            className={`w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-${r}-500`}
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">Client State</label>
+          <select
+            value={form.clientState || ''}
+            onChange={e => setForm(f => ({ ...f, clientState: e.target.value }))}
+            className={`w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-${r}-500`}
+          >
+            <option value="">-- State chuno --</option>
+            {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Address */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-1">Client Billing Address</label>
+        <textarea
+          rows={2}
+          value={form.clientAddress || ''}
+          onChange={e => setForm(f => ({ ...f, clientAddress: e.target.value }))}
+          placeholder="Full billing address (shown on invoice)"
+          className={`w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white resize-none focus:outline-none focus:ring-2 focus:ring-${r}-500`}
+        />
+      </div>
+
+      {/* GST Rate + Inter-State */}
+      <div className="grid grid-cols-2 gap-3 items-end">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">GST Rate (%)</label>
+          <select
+            value={form.taxRate ?? 18}
+            onChange={e => setForm(f => ({ ...f, taxRate: Number(e.target.value) }))}
+            className={`w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-${r}-500`}
+          >
+            <option value={0}>0% (Exempt)</option>
+            <option value={5}>5% GST</option>
+            <option value={12}>12% GST</option>
+            <option value={18}>18% GST (Default)</option>
+            <option value={28}>28% GST</option>
+          </select>
+        </div>
+        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer pb-0.5">
+          <input
+            type="checkbox"
+            checked={form.isInterState || false}
+            onChange={e => setForm(f => ({ ...f, isInterState: e.target.checked }))}
+            className={`rounded text-${r}-600`}
+          />
+          <span>
+            <span className="font-semibold">Inter-State Supply</span>
+            <br />
+            <span className="text-[10px] text-gray-400">{form.isInterState ? 'IGST will apply' : 'CGST + SGST will apply'}</span>
+          </span>
+        </label>
+      </div>
+
+      {/* Live GST preview */}
+      {(form.amountPaid || 0) > 0 && (
+        <div className="bg-white border border-indigo-100 rounded-lg px-3 py-2 text-[10px] text-gray-600 space-y-0.5">
+          <p className="font-bold text-indigo-700 mb-1">Live GST Preview</p>
+          {(() => {
+            const gross = Number(form.amountPaid) || 0;
+            const rate = (form.taxRate ?? 18) / 100;
+            const taxable = Math.round((gross / (1 + rate)) * 100) / 100;
+            const tax = Math.round((gross - taxable) * 100) / 100;
+            const half = Math.round((tax / 2) * 100) / 100;
+            return (
+              <>
+                <div className="flex justify-between"><span>Taxable Amount:</span><span className="font-semibold">₹{taxable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                {form.isInterState
+                  ? <div className="flex justify-between"><span>IGST @ {form.taxRate ?? 18}%:</span><span className="font-semibold text-orange-600">₹{tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                  : <>
+                      <div className="flex justify-between"><span>CGST @ {(form.taxRate ?? 18) / 2}%:</span><span className="font-semibold text-blue-600">₹{half.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                      <div className="flex justify-between"><span>SGST @ {(form.taxRate ?? 18) / 2}%:</span><span className="font-semibold text-purple-600">₹{half.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+                    </>
+                }
+                <div className="flex justify-between border-t border-indigo-100 mt-1 pt-1 font-bold text-indigo-800"><span>Grand Total:</span><span>₹{gross.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
+              </>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Subscriptions() {
   const [subs, setSubs] = useState([]);
   const [stats, setStats] = useState(null);
@@ -47,9 +479,18 @@ export default function Subscriptions() {
   const [activeTab, setActiveTab] = useState('all');
   const [recentInvoices, setRecentInvoices] = useState([]);
   const [modal, setModal] = useState({ open: false, type: null, sub: null });
-  const [subDetail, setSubDetail] = useState(null);         // GET /subscriptions/:id
+  const [subDetail, setSubDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [form, setForm] = useState({});
+  const [invoiceSub, setInvoiceSub] = useState(null);
+
+  const emptyCreateForm = {
+    tenantId: '', planId: '', isTrial: false, durationMonths: 12,
+    amountPaid: 0, paymentMethod: 'bank_transfer', paymentReference: '', notes: '',
+    // GST defaults
+    taxRate: 18, isInterState: false, clientGstin: '', clientState: '', clientAddress: '',
+    invoiceType: 'tax_invoice',
+  };
 
   useEffect(() => { loadAll(); }, []);
 
@@ -93,9 +534,22 @@ export default function Subscriptions() {
         setLoadingDetail(false);
       }
     } else if (type === 'CREATE') {
-      setForm({ tenantId: '', planId: '', isTrial: false, durationMonths: 12, amountPaid: 0, paymentMethod: 'bank_transfer', paymentReference: '', notes: '' });
+      setForm(emptyCreateForm);
     } else if (type === 'RENEW') {
-      setForm({ durationMonths: 12, amountPaid: 0, paymentMethod: 'bank_transfer', paymentReference: '', notes: '' });
+      // Pre-fill GST fields from existing subscription or tenant profile
+      const tenant = tenants.find(t => t._id === sub?.tenantId?._id || t._id === sub?.tenantId);
+      setForm({
+        durationMonths: 12,
+        amountPaid: sub?.planId?.price || 0,
+        paymentMethod: 'bank_transfer',
+        paymentReference: '',
+        notes: '',
+        taxRate: sub?.taxRate ?? 18,
+        isInterState: sub?.isInterState ?? false,
+        clientGstin: sub?.clientGstin || tenant?.gstin || '',
+        clientState: sub?.clientState || tenant?.billingState || '',
+        clientAddress: sub?.clientAddress || tenant?.billingAddress || '',
+      });
     } else if (type === 'UPGRADE') {
       setForm({ newPlanId: '', durationMonths: 12, amountPaid: 0, paymentMethod: 'bank_transfer', notes: '' });
     } else if (type === 'EXTEND') {
@@ -160,10 +614,10 @@ export default function Subscriptions() {
         subs;
 
   return (
-    <div className="p-4 sm:p-8 w-full min-h-screen bg-gray-50/50">
+    <div className="w-full font-sans space-y-6">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Receipt className="w-6 h-6 text-indigo-600" /> Client Subscriptions
@@ -255,6 +709,7 @@ export default function Subscriptions() {
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-1">
                         <button onClick={() => openModal('VIEW', sub)} title="View" className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"><Eye className="w-4 h-4" /></button>
+                        <button onClick={() => setInvoiceSub(sub)} title="GST Invoice" className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg"><FileText className="w-4 h-4" /></button>
                         <button onClick={() => openModal('RENEW', sub)} title="Renew" className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg"><RefreshCw className="w-4 h-4" /></button>
                         <button onClick={() => openModal('UPGRADE', sub)} title="Upgrade" className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg"><ArrowUpCircle className="w-4 h-4" /></button>
                         <button onClick={() => openModal('EXTEND', sub)} title="Extend Trial" className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg"><Clock className="w-4 h-4" /></button>
@@ -363,7 +818,21 @@ export default function Subscriptions() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Tenant</label>
-                    <select value={form.tenantId} onChange={e => setForm(f => ({ ...f, tenantId: e.target.value }))} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <select
+                      value={form.tenantId}
+                      onChange={e => {
+                        const tId = e.target.value;
+                        const selTenant = tenants.find(t => t._id === tId);
+                        setForm(f => ({
+                          ...f,
+                          tenantId: tId,
+                          clientGstin: selTenant?.gstin || f.clientGstin || '',
+                          clientState: selTenant?.billingState || f.clientState || '',
+                          clientAddress: selTenant?.billingAddress || f.clientAddress || '',
+                        }));
+                      }}
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
                       <option value="">-- Select Tenant --</option>
                       {tenants.map(t => <option key={t._id} value={t._id}>{t.name} ({t.slug})</option>)}
                     </select>
@@ -406,6 +875,8 @@ export default function Subscriptions() {
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Payment Reference</label>
                     <input type="text" value={form.paymentReference} onChange={e => setForm(f => ({ ...f, paymentReference: e.target.value }))} placeholder="UTR / Transaction ID" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                   </div>
+                  {/* GST Invoice Details */}
+                  <GstFormSection form={form} setForm={setForm} accentColor="indigo" />
                 </div>
               )}
 
@@ -435,6 +906,8 @@ export default function Subscriptions() {
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Payment Reference</label>
                     <input type="text" value={form.paymentReference} onChange={e => setForm(f => ({ ...f, paymentReference: e.target.value }))} placeholder="UTR / Transaction ID" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                   </div>
+                  {/* GST Invoice Details — pre-filled from previous subscription */}
+                  <GstFormSection form={form} setForm={setForm} accentColor="emerald" />
                 </div>
               )}
 
@@ -530,6 +1003,15 @@ export default function Subscriptions() {
               <button onClick={closeModal} className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg transition-colors">
                 {modal.type === 'VIEW' ? 'Close' : 'Cancel'}
               </button>
+              {/* VIEW modal: Invoice + Edit buttons */}
+              {modal.type === 'VIEW' && (
+                <button
+                  onClick={() => { closeModal(); setInvoiceSub(subDetail || modal.sub); }}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors"
+                >
+                  <FileText className="w-4 h-4" /> Generate Invoice
+                </button>
+              )}
               {modal.type !== 'VIEW' && (
                 <button onClick={handleConfirm} disabled={saving}
                   className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-60 ${modal.type === 'CANCEL' ? 'bg-red-600 hover:bg-red-700' : modal.type === 'PAUSE' ? 'bg-yellow-600 hover:bg-yellow-700' : modal.type === 'RESUME' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
@@ -541,6 +1023,9 @@ export default function Subscriptions() {
           </div>
         </div>
       )}
+
+      {/* GST Invoice Modal */}
+      {invoiceSub && <GstInvoiceModal sub={invoiceSub} onClose={() => setInvoiceSub(null)} />}
     </div>
   );
 }

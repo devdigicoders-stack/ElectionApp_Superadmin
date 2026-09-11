@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Users, UserCheck, Clock, AlertTriangle, Database, ArrowUpRight,
-  Calendar, Plus, MoreHorizontal, Receipt, TrendingUp, FileText
+  Users, UserCheck, Clock, AlertTriangle,
+  Plus, Receipt, TrendingUp, HardDrive,
+  ShieldAlert, CheckCircle2, ChevronRight, RefreshCw,
+  Globe, AlertCircle
 } from 'lucide-react';
 import {
   ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -49,6 +52,7 @@ function StatCard({ title, value, icon: Icon, iconColor, iconBg, loading }) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats]           = useState(null);
   const [growth, setGrowth]         = useState(null);
   const [overview, setOverview]     = useState(null);
@@ -56,6 +60,7 @@ export default function Dashboard() {
   const [loadingGrowth, setLoadingGrowth]   = useState(true);
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [growthDays, setGrowthDays] = useState(30);
+  const [alertFilter, setAlertFilter] = useState('ALL');
 
   // ── API 1: GET /super-admin/dashboard/stats ──────────────────
   useEffect(() => {
@@ -89,13 +94,36 @@ export default function Dashboard() {
   const tenantActive    = stats?.tenants?.active ?? 0;
   const tenantTrial     = stats?.tenants?.trial ?? 0;
   const tenantSuspended = stats?.tenants?.suspended ?? 0;
-  const totalCitizens   = stats?.citizens?.total ?? 0;
-  const totalRevenue    = stats?.subscriptions?.totalRevenue ?? 0;
-  const storageFmt      = stats?.storage?.formatted ?? '0 MB';
+  const tenantExpired   = stats?.tenants?.expired ?? stats?.subscriptions?.expired ?? 0;
+  const totalCitizens       = stats?.citizens?.total ?? stats?.citizens?.registered ?? 0;
+  const activeCitizens      = stats?.citizens?.active ?? totalCitizens;
+  const activeRateStr       = stats?.citizens?.activeRate ?? (totalCitizens > 0 ? `${Math.round((activeCitizens / totalCitizens) * 100)}%` : '100%');
+  const activeRateNum       = stats?.citizens?.activeRateNum ?? (totalCitizens > 0 ? Math.round((activeCitizens / totalCitizens) * 100) : 100);
+  const inactiveCitizens    = stats?.citizens?.inactive ?? Math.max(totalCitizens - activeCitizens, 0);
+  const newCitizens30d      = stats?.citizens?.newInLast30Days ?? 0;
+  const totalRevenue        = stats?.subscriptions?.totalRevenue ?? 0;
+  const storageUsedFmt      = stats?.storage?.usedFormatted || stats?.storage?.formatted || '0 MB';
+  const storageAllocatedFmt = stats?.storage?.allocatedFormatted || '50.00 GB';
+  const storagePercentUsed  = stats?.storage?.percentUsed ?? 0;
+  const storageStatus       = stats?.storage?.status || 'normal';
+  const storageUploadsFmt   = stats?.storage?.physicalUploadsFormatted || '0 MB';
+  const storageDbFmt        = stats?.storage?.databaseFormatted || '0 MB';
+  const storageFileCount    = stats?.storage?.fileCount || 0;
+
+  // ── Dynamic System Alerts (SRS Sec 45.1) ──────────────────────
+  const alertsData = stats?.alerts || { total: 0, criticalCount: 0, warningCount: 0, infoCount: 0, items: [] };
+  const alertItems = alertsData.items || [];
+  const filteredAlerts = alertItems.filter(a => {
+    if (alertFilter === 'ALL') return true;
+    if (alertFilter === 'critical') return a.severity === 'critical';
+    if (alertFilter === 'warning') return a.severity === 'warning';
+    return a.category === alertFilter;
+  });
 
   const tenantPieData = [
     { name: 'Active',    value: tenantActive,    color: '#047857' },
     { name: 'Trial',     value: tenantTrial,     color: '#3B82F6' },
+    { name: 'Expired',   value: tenantExpired,   color: '#F59E0B' },
     { name: 'Suspended', value: tenantSuspended, color: '#EF4444' },
   ].filter(d => d.value > 0);
 
@@ -123,32 +151,111 @@ export default function Dashboard() {
           <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-0.5">Live platform overview from backend</p>
         </div>
-        <button className="flex items-center gap-2 bg-[#072F2B] hover:bg-[#0B4640] text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md w-fit">
+        <button
+          onClick={() => navigate('/clients')}
+          className="flex items-center gap-2 bg-[#072F2B] hover:bg-[#0B4640] text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md w-fit cursor-pointer"
+        >
           <Plus className="w-4 h-4" strokeWidth={3} />
           Add New Tenant
         </button>
       </div>
 
-      {/* ── Stat Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* ── Stat Cards (SRS Section 45.1) ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9 gap-3.5">
         <StatCard title="Total Tenants"    value={tenantTotal}                    icon={Users}        iconColor="text-emerald-600" iconBg="bg-emerald-50"  loading={loadingStats} />
         <StatCard title="Active Tenants"   value={tenantActive}                   icon={UserCheck}    iconColor="text-green-600"   iconBg="bg-green-50"    loading={loadingStats} />
         <StatCard title="Trial Tenants"    value={tenantTrial}                    icon={Clock}        iconColor="text-blue-500"    iconBg="bg-blue-50"     loading={loadingStats} />
+        <StatCard title="Expired"          value={tenantExpired}                  icon={Clock}        iconColor="text-amber-600"   iconBg="bg-amber-50"    loading={loadingStats} />
         <StatCard title="Suspended"        value={tenantSuspended}                icon={AlertTriangle}iconColor="text-red-600"     iconBg="bg-red-50"      loading={loadingStats} />
-        <StatCard title="Total Citizens"   value={totalCitizens.toLocaleString()} icon={Users}        iconColor="text-purple-600"  iconBg="bg-purple-50"   loading={loadingStats} />
 
-        {/* Revenue Card */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-4">
+        {/* 1. Total Registered Users (SRS Sec 45.1) */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-3.5">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-purple-50">
+            <Users className="w-5 h-5 text-purple-600" strokeWidth={2.5} />
+          </div>
+          <div className="min-w-0 flex-1">
+            {loadingStats ? (
+              <Skeleton className="h-7 w-20 mb-1" />
+            ) : (
+              <h3 className="text-xl font-black text-gray-900 leading-none truncate">
+                {totalCitizens.toLocaleString()}
+              </h3>
+            )}
+            <div className="flex items-center justify-between gap-1 mt-1">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider truncate">Registered</p>
+              {newCitizens30d > 0 && (
+                <span className="text-[9px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">
+                  +{newCitizens30d} 30d
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Total Active Users (SRS Sec 45.1) */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-3.5">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-teal-50">
+            <UserCheck className="w-5 h-5 text-teal-600" strokeWidth={2.5} />
+          </div>
+          <div className="min-w-0 flex-1">
+            {loadingStats ? (
+              <Skeleton className="h-7 w-20 mb-1" />
+            ) : (
+              <h3 className="text-xl font-black text-gray-900 leading-none truncate">
+                {activeCitizens.toLocaleString()}
+              </h3>
+            )}
+            <div className="flex items-center justify-between gap-1 mt-1">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider truncate">Active Users</p>
+              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-teal-100 text-teal-800">
+                {activeRateStr}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Dynamic Total Storage Usage Card (SRS Sec 45.1) */}
+        <div
+          onClick={() => navigate('/usage')}
+          className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-3.5 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group"
+          title="Click to view detailed per-tenant usage breakdown"
+        >
+          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-indigo-50 group-hover:bg-indigo-100 transition-colors">
+            <HardDrive className="w-5 h-5 text-indigo-600" strokeWidth={2.5} />
+          </div>
+          <div className="min-w-0 flex-1">
+            {loadingStats ? (
+              <Skeleton className="h-7 w-20 mb-1" />
+            ) : (
+              <h3 className="text-xl font-black text-gray-900 leading-none truncate">
+                {storageUsedFmt}
+              </h3>
+            )}
+            <div className="flex items-center justify-between gap-1 mt-1">
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider truncate">Storage Used</p>
+              <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
+                storageStatus === 'critical' ? 'bg-red-100 text-red-700' :
+                storageStatus === 'warning' ? 'bg-amber-100 text-amber-700' :
+                'bg-emerald-100 text-emerald-700'
+              }`}>
+                {storagePercentUsed}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Revenue Card */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-3.5">
           <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-yellow-50">
             <Receipt className="w-5 h-5 text-yellow-600" strokeWidth={2.5} />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             {loadingStats ? <Skeleton className="h-7 w-20 mb-1" /> : (
-              <h3 className="text-xl font-black text-gray-900 leading-none">
+              <h3 className="text-xl font-black text-gray-900 leading-none truncate">
                 ₹{totalRevenue.toLocaleString()}
               </h3>
             )}
-            <p className="text-[11px] font-semibold text-gray-500 mt-1 uppercase tracking-wider">Total Revenue</p>
+            <p className="text-[11px] font-semibold text-gray-500 mt-1 uppercase tracking-wider truncate">Total Revenue</p>
           </div>
         </div>
       </div>
@@ -240,14 +347,98 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Storage */}
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
-                  <Database className="w-4 h-4 text-emerald-600" />
+              {/* Dynamic Platform Storage Utilization (SRS Sec 45.1 & 48) */}
+              <div className="p-3.5 bg-gradient-to-br from-indigo-50/60 to-white rounded-xl border border-indigo-100/90 shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-100/80 flex items-center justify-center shrink-0">
+                      <HardDrive className="w-3.5 h-3.5 text-indigo-700" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-gray-900 leading-tight">Storage Utilization</p>
+                      <p className="text-[10px] font-medium text-gray-500">Live physical & DB usage</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate('/usage')}
+                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
+                  >
+                    Manage →
+                  </button>
                 </div>
+
+                {/* Progress bar */}
                 <div>
-                  <p className="text-sm font-bold text-gray-900">{storageFmt}</p>
-                  <p className="text-[10px] font-semibold text-gray-500 uppercase">Est. Storage Used</p>
+                  <div className="flex justify-between items-baseline mb-1 text-[11px]">
+                    <span className="font-extrabold text-gray-900">{storageUsedFmt}</span>
+                    <span className="font-semibold text-gray-400">of {storageAllocatedFmt} ({storagePercentUsed}%)</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        storageStatus === 'critical' ? 'bg-red-500' :
+                        storageStatus === 'warning' ? 'bg-amber-500' :
+                        'bg-indigo-600'
+                      }`}
+                      style={{ width: `${Math.max(storagePercentUsed, 2)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Breakdown chips */}
+                <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-gray-100 text-[10px]">
+                  <div className="flex items-center gap-1 text-gray-600 truncate" title={`${storageUploadsFmt} in ${storageFileCount} uploaded files`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                    <span className="truncate">Files: <strong>{storageUploadsFmt}</strong> ({storageFileCount})</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-gray-600 truncate" title={`Database documents: ${storageDbFmt}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-teal-500 shrink-0" />
+                    <span className="truncate">DB: <strong>{storageDbFmt}</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic User Activity & Retention Widget (SRS Sec 45.1) */}
+              <div className="p-3.5 bg-gradient-to-br from-purple-50/60 to-white rounded-xl border border-purple-100/90 shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-purple-100/80 flex items-center justify-center shrink-0">
+                      <UserCheck className="w-3.5 h-3.5 text-purple-700" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-gray-900 leading-tight">Active vs Registered</p>
+                      <p className="text-[10px] font-medium text-gray-500">Citizen platform engagement</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800">
+                    {activeRateStr} Active
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div>
+                  <div className="flex justify-between items-baseline mb-1 text-[11px]">
+                    <span className="font-extrabold text-gray-900">{activeCitizens.toLocaleString()} Active</span>
+                    <span className="font-semibold text-gray-400">of {totalCitizens.toLocaleString()} Registered</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-purple-600 transition-all duration-500"
+                      style={{ width: `${Math.min(Math.max(activeRateNum, 2), 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Breakdown chips */}
+                <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-gray-100 text-[10px]">
+                  <div className="flex items-center gap-1 text-gray-600 truncate" title={`New citizen signups in last 30 days: +${newCitizens30d}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="truncate">New (30d): <strong>+{newCitizens30d}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1 text-gray-600 truncate" title={`Inactive / non-engaging citizens: ${inactiveCitizens}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                    <span className="truncate">Inactive: <strong>{inactiveCitizens}</strong></span>
+                  </div>
                 </div>
               </div>
 
@@ -283,6 +474,188 @@ export default function Dashboard() {
                   <p className="text-[10px] font-semibold text-gray-500 uppercase">Active Subscriptions</p>
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── System Alerts & Quick Warning Feed (SRS Section 45.1) ── */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        {/* Header Bar */}
+        <div className="p-5 sm:p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-gray-50/80 to-white">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center shrink-0 shadow-xs">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h3 className="text-base font-extrabold text-gray-900">System Alerts & Quick Warnings</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Live Feed
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Real-time operational alerts for expiring subscriptions, quota thresholds, domain issues & tenant status.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Metrics Badges & Refresh */}
+          <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+            {alertsData.criticalCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                {alertsData.criticalCount} Critical
+              </span>
+            )}
+            {alertsData.warningCount > 0 && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                {alertsData.warningCount} Warnings
+              </span>
+            )}
+            {alertsData.criticalCount === 0 && alertsData.warningCount === 0 && !loadingStats && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                All Systems Healthy
+              </span>
+            )}
+            <button
+              onClick={() => {
+                setLoadingStats(true);
+                apiClient.get('/super-admin/dashboard/stats')
+                  .then(res => setStats(res.data?.data || res.data))
+                  .finally(() => setLoadingStats(false));
+              }}
+              title="Refresh Alert Feed"
+              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingStats ? 'animate-spin text-emerald-600' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Filter Pills */}
+        <div className="px-5 py-2.5 border-b border-gray-100 bg-gray-50/40 flex items-center gap-1.5 overflow-x-auto">
+          {[
+            { id: 'ALL', label: `All Alerts (${alertItems.length})` },
+            { id: 'critical', label: `Critical (${alertsData.criticalCount})`, disabled: alertsData.criticalCount === 0 },
+            { id: 'warning', label: `Warnings (${alertsData.warningCount})`, disabled: alertsData.warningCount === 0 },
+            { id: 'subscription', label: 'Subscriptions & Renewals' },
+            { id: 'storage', label: 'Storage & Quotas' },
+            { id: 'domain', label: 'Custom Domains' },
+            { id: 'tenant', label: 'Tenants' },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setAlertFilter(tab.id)}
+              disabled={tab.disabled}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                alertFilter === tab.id
+                  ? 'bg-gray-900 text-white shadow-xs'
+                  : 'text-gray-600 hover:bg-gray-200/60 disabled:opacity-40 disabled:cursor-not-allowed'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Alerts Content Feed */}
+        <div className="p-5">
+          {loadingStats ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+            </div>
+          ) : filteredAlerts.length === 0 ? (
+            <div className="py-10 text-center flex flex-col items-center justify-center">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-2.5 border border-emerald-100 shadow-2xs">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-gray-900">
+                {alertFilter === 'ALL' ? 'No Active Operational Warnings' : 'No Alerts in this Category'}
+              </h4>
+              <p className="text-xs text-gray-500 mt-0.5 max-w-sm">
+                {alertFilter === 'ALL'
+                  ? 'All tenant subscriptions are active, storage quotas are within limits, and domains are functioning properly.'
+                  : 'Try selecting "All Alerts" to view any other platform items.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {filteredAlerts.map(alert => (
+                <div
+                  key={alert.id}
+                  className={`p-4 rounded-xl border transition-all shadow-2xs hover:shadow-xs flex flex-col justify-between gap-3 ${
+                    alert.severity === 'critical'
+                      ? 'bg-rose-50/40 border-rose-200 hover:border-rose-300'
+                      : alert.severity === 'warning'
+                      ? 'bg-amber-50/40 border-amber-200 hover:border-amber-300'
+                      : 'bg-blue-50/40 border-blue-200 hover:border-blue-300'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-2xs ${
+                      alert.severity === 'critical' ? 'bg-rose-100 text-rose-700' :
+                      alert.severity === 'warning' ? 'bg-amber-100 text-amber-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>
+                      {alert.category === 'subscription' ? <Clock className="w-4 h-4" /> :
+                       alert.category === 'storage' ? <HardDrive className="w-4 h-4" /> :
+                       alert.category === 'domain' ? <Globe className="w-4 h-4" /> :
+                       alert.category === 'tenant' ? <Users className="w-4 h-4" /> :
+                       <AlertCircle className="w-4 h-4" />}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md tracking-wider ${
+                          alert.severity === 'critical' ? 'bg-rose-200/70 text-rose-800' :
+                          alert.severity === 'warning' ? 'bg-amber-200/70 text-amber-800' :
+                          'bg-blue-200/70 text-blue-800'
+                        }`}>
+                          {alert.severity}
+                        </span>
+
+                        {alert.tenantName && (
+                          <span className="text-[11px] font-bold text-gray-800 flex items-center gap-1">
+                            <span>{alert.tenantName}</span>
+                            {alert.tenantSlug && (
+                              <span className="font-mono text-[9px] text-gray-400 font-normal">({alert.tenantSlug})</span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+
+                      <h4 className="text-xs font-bold text-gray-900 leading-snug">{alert.title}</h4>
+                      <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">{alert.message}</p>
+                    </div>
+                  </div>
+
+                  {/* Action Link Button */}
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-100/80 mt-1">
+                    <span className="text-[10px] text-gray-400 font-medium">
+                      Category: <strong className="capitalize text-gray-600">{alert.category}</strong>
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (alert.actionUrl) navigate(alert.actionUrl);
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer ${
+                        alert.severity === 'critical'
+                          ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                          : alert.severity === 'warning'
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      }`}
+                    >
+                      <span>{alert.actionLabel || 'Take Action'}</span>
+                      <ChevronRight className="w-3 h-3 stroke-[3]" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

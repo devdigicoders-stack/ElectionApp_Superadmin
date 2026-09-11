@@ -15,6 +15,18 @@ const tenantsService = {
   getOne: (id) =>
     apiClient.get(`/super-admin/tenants/${id}`).then(r => r.data.data),
 
+  // GET /super-admin/tenants/:id/full-profile — Full Dynamic Client Profile with Stats & Areas
+  getFullProfile: (id) =>
+    apiClient.get(`/super-admin/tenants/${id}/full-profile`).then(r => r.data.data),
+
+  // GET /areas/tree?tenantId=:id — Client's real geographic area hierarchy
+  getTenantAreaTree: (tenantId) =>
+    apiClient.get(`/areas/tree?tenantId=${tenantId}`).then(r => r.data.data),
+
+  // GET /registration-form/public?tenantId=:id — Dynamic Registration Form Schema
+  getTenantRegistrationForm: (tenantId) =>
+    apiClient.get(`/registration-form/public?tenantId=${tenantId}`).then(r => r.data.data),
+
   // POST /super-admin/tenants — Naya tenant banao
   // body: { slug, name, customDomain?, branding?, settings? }
   create: (body) =>
@@ -70,6 +82,10 @@ const tenantsService = {
   // body: { name, email, password, role }
   createAdminUser: (id, body) =>
     apiClient.post(`/super-admin/tenants/${id}/admin-users`, body).then(r => r.data.data),
+
+  // DELETE /super-admin/tenants/:id/admin-users/:adminUserId — Tenant ka admin user delete karo
+  deleteAdminUser: (tenantId, adminUserId) =>
+    apiClient.delete(`/super-admin/tenants/${tenantId}/admin-users/${adminUserId}`).then(r => r.data),
 
   // PATCH /super-admin/tenants/:id/suspend — Tenant suspend karo
   suspend: (id) =>

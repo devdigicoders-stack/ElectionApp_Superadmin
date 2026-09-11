@@ -21,10 +21,30 @@ const FEATURE_OPTIONS = [
 
 const BILLING_CYCLES = ['monthly', 'quarterly', 'yearly', 'one_time'];
 
+export const SUPPORT_LEVELS = [
+  { value: 'community', label: 'Community Support (Forums / Docs)' },
+  { value: 'email_24h', label: 'Email Support (24h SLA)' },
+  { value: 'priority_whatsapp', label: 'Priority WhatsApp Hotline' },
+  { value: 'dedicated_manager', label: 'Dedicated Account Manager' },
+];
+
+export const TARGET_SEGMENTS = [
+  { value: 'gram_panchayat', label: 'Gram Panchayat / Ward' },
+  { value: 'municipal_ward', label: 'Municipal Corporation / Ward' },
+  { value: 'vidhan_sabha', label: 'Vidhan Sabha (MLA Candidate)' },
+  { value: 'lok_sabha', label: 'Lok Sabha (MP Candidate)' },
+  { value: 'political_party', label: 'Political Party / State HQ' },
+  { value: 'all', label: 'All Segments (General)' },
+];
+
 const emptyForm = {
   name: '', slug: '', description: '', price: 0, currency: 'INR',
-  billingCycle: 'yearly', trialDays: 14, features: [],
+  billingCycle: 'yearly', trialDays: 14,
+  supportLevel: 'email_24h',
+  targetSegment: 'vidhan_sabha',
+  features: [],
   limits: { maxCitizens: -1, maxStaffUsers: -1, maxPostersPerMonth: -1, maxNotificationsPerMonth: -1, maxStorageMB: -1 },
+  overageRates: { citizenPer1kRate: 0, storagePerGbRate: 0, smsRate: 0, whatsappRate: 0 },
   isPopular: false, isActive: true, sortOrder: 0,
 };
 
@@ -80,6 +100,14 @@ export default function Plans() {
         trialDays: plan.trialDays ?? 14,
         features: plan.features || [],
         limits: plan.limits || emptyForm.limits,
+        supportLevel: plan.supportLevel || 'email_24h',
+        targetSegment: plan.targetSegment || 'vidhan_sabha',
+        overageRates: {
+          citizenPer1kRate: plan.overageRates?.citizenPer1kRate ?? 0,
+          storagePerGbRate: plan.overageRates?.storagePerGbRate ?? 0,
+          smsRate: plan.overageRates?.smsRate ?? 0,
+          whatsappRate: plan.overageRates?.whatsappRate ?? 0,
+        },
         isPopular: plan.isPopular || false,
         isActive: plan.isActive ?? true,
         sortOrder: plan.sortOrder || 0,
@@ -175,8 +203,8 @@ export default function Plans() {
   }
 
   return (
-    <div className="p-4 sm:p-8 w-full">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+    <div className="w-full font-sans space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Subscription Plans</h1>
           <p className="text-sm text-gray-500 mt-1">Manage billing packages, features, and plan assignments.</p>
@@ -201,10 +229,18 @@ export default function Plans() {
                 {plan.isActive ? 'ACTIVE' : 'DISABLED'}
               </div>
 
-              <div className="mb-4 pr-12">
+              <div className="mb-3 pr-12">
+                <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                  <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200 text-[10px] font-bold">
+                    {TARGET_SEGMENTS.find(s => s.value === plan.targetSegment)?.label || plan.targetSegment || 'Vidhan Sabha'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold">
+                    {SUPPORT_LEVELS.find(s => s.value === plan.supportLevel)?.label?.split(' (')[0] || plan.supportLevel || 'Email Support'}
+                  </span>
+                </div>
                 <h3 className="text-xl font-bold text-gray-900 group-hover:text-emerald-700 transition-colors">{plan.name}</h3>
-                <div className="text-xs text-gray-400 mt-1 font-mono">{plan.slug}</div>
-                {plan.description && <p className="text-xs text-gray-500 mt-1">{plan.description}</p>}
+                <div className="text-xs text-gray-400 mt-0.5 font-mono">{plan.slug}</div>
+                {plan.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{plan.description}</p>}
               </div>
 
               <div className="mb-4 flex items-baseline">
@@ -213,18 +249,30 @@ export default function Plans() {
               </div>
 
               <div className="flex-1">
-                <p className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-3 border-b border-gray-100 pb-2">Features</p>
-                <ul className="space-y-2">
-                  {(plan.features || []).slice(0, 5).map((f, i) => (
-                    <li key={i} className="flex items-center text-sm text-gray-600 gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <p className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1.5">Features & Limits</p>
+                <ul className="space-y-1.5">
+                  {(plan.features || []).slice(0, 4).map((f, i) => (
+                    <li key={i} className="flex items-center text-xs text-gray-600 gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                       {FEATURE_OPTIONS.find(o => o.key === f)?.label || f}
                     </li>
                   ))}
-                  {(plan.features || []).length > 5 && (
-                    <li className="text-xs text-gray-400">+{plan.features.length - 5} more...</li>
+                  {(plan.features || []).length > 4 && (
+                    <li className="text-[11px] text-gray-400">+{plan.features.length - 4} more features...</li>
                   )}
                 </ul>
+
+                {/* Overage Rates Summary */}
+                <div className="mt-3 pt-2 border-t border-gray-100 text-[11px] text-gray-500 space-y-1 bg-gray-50/70 p-2 rounded-lg">
+                  <div className="flex justify-between">
+                    <span>Extra 1k Voters:</span>
+                    <span className="font-bold text-gray-800">₹{plan.overageRates?.citizenPer1kRate || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Extra 1 GB Media:</span>
+                    <span className="font-bold text-gray-800">₹{plan.overageRates?.storagePerGbRate || 0}</span>
+                  </div>
+                </div>
               </div>
 
               <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
@@ -318,6 +366,81 @@ export default function Plans() {
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-1">Sort Order</label>
                       <input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: Number(e.target.value) }))} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm" />
+                    </div>
+                  </div>
+
+                  {/* Target Segment & Support Level */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50/70 p-3.5 rounded-xl border border-gray-200/80">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Target Segment (SRS Sec 47)</label>
+                      <select
+                        value={form.targetSegment}
+                        onChange={e => setForm(f => ({ ...f, targetSegment: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-semibold bg-white"
+                      >
+                        {TARGET_SEGMENTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Support Level SLA</label>
+                      <select
+                        value={form.supportLevel}
+                        onChange={e => setForm(f => ({ ...f, supportLevel: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-semibold bg-white"
+                      >
+                        {SUPPORT_LEVELS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Overage Rates */}
+                  <div className="bg-emerald-50/50 p-3.5 rounded-xl border border-emerald-200/60">
+                    <label className="block text-xs font-black text-emerald-950 uppercase tracking-wider mb-2">
+                      Overage Rates (Extra Consumption Charges)
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-600 mb-1">+1,000 Voters (₹)</label>
+                        <input
+                          type="number"
+                          value={form.overageRates?.citizenPer1kRate ?? 0}
+                          onChange={e => setForm(f => ({ ...f, overageRates: { ...f.overageRates, citizenPer1kRate: Number(e.target.value) } }))}
+                          placeholder="e.g. 500"
+                          className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-600 mb-1">+1 GB Media Storage (₹)</label>
+                        <input
+                          type="number"
+                          value={form.overageRates?.storagePerGbRate ?? 0}
+                          onChange={e => setForm(f => ({ ...f, overageRates: { ...f.overageRates, storagePerGbRate: Number(e.target.value) } }))}
+                          placeholder="e.g. 100"
+                          className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-600 mb-1">+1 DLT SMS (₹)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={form.overageRates?.smsRate ?? 0}
+                          onChange={e => setForm(f => ({ ...f, overageRates: { ...f.overageRates, smsRate: Number(e.target.value) } }))}
+                          placeholder="e.g. 0.25"
+                          className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-600 mb-1">+1 WhatsApp Msg (₹)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={form.overageRates?.whatsappRate ?? 0}
+                          onChange={e => setForm(f => ({ ...f, overageRates: { ...f.overageRates, whatsappRate: Number(e.target.value) } }))}
+                          placeholder="e.g. 0.65"
+                          className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
                     </div>
                   </div>
                   <div>

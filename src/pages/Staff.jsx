@@ -257,10 +257,10 @@ export default function Staff() {
   );
 
   return (
-    <div className="p-4 sm:p-8 w-full min-h-screen bg-gray-50/50">
+    <div className="w-full font-sans space-y-6">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
             <Shield className="w-6 h-6 text-indigo-600" /> Admin & Staff Management

@@ -141,10 +141,10 @@ export default function Domains() {
   }
 
   return (
-    <div className="p-4 sm:p-8 w-full min-h-screen bg-gray-50/50">
+    <div className="w-full font-sans space-y-6">
 
       {/* Header */}
-      <div className="mb-8">
+      <div>
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <Globe className="w-6 h-6 text-indigo-600" /> Custom Domain Management
         </h1>

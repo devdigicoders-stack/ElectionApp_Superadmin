@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
+import apiClient from '../services/apiClient';
+import { onForegroundMessage, requestNotificationPermissionAndGetToken } from '../config/firebase';
+import { playNotificationSound } from '../utils/sound';
 import { 
   LayoutDashboard, Users, CreditCard, Layers, Palette, 
   UserCircle, BarChart3, Plug, ScrollText, Settings, 
   Search, Bell, MessageSquare, ChevronDown, Globe, 
-  UsersRound, PieChart, Receipt, Sun, HelpCircle, Menu, LogOut, Landmark
+  UsersRound, PieChart, Receipt, Sun, HelpCircle, Menu, LogOut, Landmark, MapPin,
+  FileSpreadsheet
 } from 'lucide-react';
 
 const LogoIcon = () => (
@@ -16,13 +21,16 @@ const LogoIcon = () => (
 export const navItems = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { name: 'Tenants / Clients', path: '/clients', icon: Users, permission: 'tenants:read' },
+  { name: 'Master Areas', path: '/master-areas', icon: MapPin, permission: 'tenants:read' },
   { name: 'Subscription Plans', path: '/plans', icon: CreditCard, permission: 'plans:read' },
   { name: 'Subscriptions', path: '/subscriptions', icon: Receipt, permission: 'subscriptions:read' },
   { name: 'Domains', path: '/domains', icon: Globe, permission: 'tenants:domain' },
   { name: 'Admin & Staff', path: '/staff', icon: UserCircle, role: 'super_admin' },
   { name: 'Usage Management', path: '/usage', icon: BarChart3, permission: 'usage:read' },
+  { name: 'Data Exports', path: '/exports', icon: FileSpreadsheet, permission: 'exports:read' },
   { name: 'Notifications', path: '/notifications', icon: Bell, permission: 'system:health' },
   { name: 'Audit Logs', path: '/audit-logs', icon: ScrollText, permission: 'audit_logs:read' },
+  { name: 'System Settings', path: '/settings', icon: Settings, role: 'super_admin' },
   { name: 'My Profile', path: '/profile', icon: UserCircle },
 ];
 
@@ -96,8 +104,48 @@ export function hasPermission(item, admin) {
 
 export default function AdminLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
+  const [alertCount, setAlertCount] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Dynamically sync active operational warnings count for top header bell
+  useEffect(() => {
+    apiClient.get('/super-admin/dashboard/alerts')
+      .then(res => {
+        const data = res.data?.data || res.data;
+        const count = (data?.criticalCount || 0) + (data?.warningCount || 0);
+        setAlertCount(count);
+      })
+      .catch(() => setAlertCount(0));
+  }, [location.pathname]);
+
+  // Foreground Firebase Push Notification Listener
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      requestNotificationPermissionAndGetToken();
+    }
+
+    onForegroundMessage((payload) => {
+      const title = payload.notification?.title || payload.data?.title || 'System Notification';
+      const body = payload.notification?.body || payload.data?.body || '';
+
+      // Play dynamic notification ringtone chime
+      playNotificationSound('crystal');
+
+      setAlertCount((c) => c + 1);
+
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'info',
+        title: title,
+        text: body,
+        showConfirmButton: false,
+        timer: 6000,
+        timerProgressBar: true,
+      });
+    });
+  }, []);
 
   // Close sidebar on mobile when route changes
   useEffect(() => {
@@ -220,13 +268,13 @@ export default function AdminLayout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         
         {/* Top Header */}
-        <header className="h-[76px] bg-white border-b border-gray-100 flex items-center justify-between px-8 z-10 shrink-0 shadow-sm">
+        <header className="h-[70px] bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 z-10 shrink-0 shadow-2xs">
           
           {/* Page Title & Sidebar Toggle */}
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors" 
+              className="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors cursor-pointer" 
               title="Toggle Sidebar"
             >
               <Menu className="w-5 h-5" />
@@ -238,11 +286,16 @@ export default function AdminLayout() {
           <div className="flex items-center gap-3 sm:gap-6">
             
             <button 
-              onClick={() => navigate('/notifications')}
-              className="relative p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-50 transition-colors"
+              onClick={() => navigate('/dashboard')}
+              title={alertCount > 0 ? `${alertCount} active operational alerts` : 'System Alerts'}
+              className="relative p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-50 transition-colors cursor-pointer"
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 rounded-full border-2 border-white text-[9px] text-white flex items-center justify-center font-bold">3</span>
+              {alertCount > 0 && (
+                <span className="absolute top-1 right-1 px-1 py-0.2 min-w-[16px] h-[16px] bg-red-500 rounded-full border-2 border-white text-[9px] text-white flex items-center justify-center font-black animate-pulse">
+                  {alertCount > 9 ? '9+' : alertCount}
+                </span>
+              )}
             </button>
 
             <div className="h-8 w-px bg-gray-200 hidden sm:block"></div>
@@ -262,9 +315,9 @@ export default function AdminLayout() {
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-[#F8FAFC] p-6">
-          <div className="bg-transparent rounded-xl min-h-[calc(100vh-128px)] flex flex-col overflow-hidden">
+        {/* Page Content - Expanded width with optimized padding */}
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-[#F8FAFC] p-3 sm:p-4 lg:p-5">
+          <div className="w-full bg-transparent min-h-[calc(100vh-110px)] flex flex-col">
             <Outlet />
           </div>
         </main>

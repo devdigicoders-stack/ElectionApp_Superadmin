@@ -192,9 +192,9 @@ export default function Profile() {
     : 'SA';
 
   return (
-    <div className="p-4 sm:p-8 w-full min-h-screen bg-gray-50/50">
+    <div className="w-full font-sans space-y-6">
       {/* Header */}
-      <div className="mb-8">
+      <div>
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-lg bg-[#072F2B] flex items-center justify-center text-emerald-400 shadow-sm">
             <User className="w-5 h-5" />
