@@ -459,8 +459,8 @@ export default function Clients() {
       const nextNum = current.length + 1;
       const newSlide = {
         order: nextNum,
-        title: `Constituency Drive ${nextNum}`,
-        subtitle: 'Connect with volunteers and stay informed on local development milestones.',
+        title: '',
+        subtitle: '',
         mediaType: 'image',
         mediaUrl: '',
       };
@@ -3466,30 +3466,7 @@ export default function Clients() {
                               </div>
                             </div>
 
-                            <div className="space-y-1.5 mb-2">
-                              <div>
-                                <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">Title</label>
-                                <input
-                                  type="text"
-                                  value={slide.title || ''}
-                                  placeholder="e.g. Welcome to App"
-                                  onChange={e => handleUpdateSplashSlide(sIdx, 'title', e.target.value)}
-                                  className="w-full px-2 py-1 text-xs font-semibold rounded border border-gray-200 outline-none focus:ring-1 focus:ring-purple-500 bg-white"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">Subtitle</label>
-                                <input
-                                  type="text"
-                                  value={slide.subtitle || ''}
-                                  placeholder="e.g. Real-time updates..."
-                                  onChange={e => handleUpdateSplashSlide(sIdx, 'subtitle', e.target.value)}
-                                  className="w-full px-2 py-1 text-xs rounded border border-gray-200 outline-none focus:ring-1 focus:ring-purple-500 bg-white"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="space-y-1.5 pt-1.5 border-t border-gray-100">
+                            <div className="space-y-1.5">
                               <div className="flex items-center gap-1.5">
                                 <label className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded text-xs font-bold text-purple-700 cursor-pointer transition-colors">
                                   {isUploadingThis ? (

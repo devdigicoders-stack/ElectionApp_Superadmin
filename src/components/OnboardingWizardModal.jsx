@@ -222,29 +222,29 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
       splashScreens: [
         {
           order: 1,
-          title: 'Welcome to Citizen Connect',
-          subtitle: 'Direct engagement with your elected leader and real-time constituency development alerts.',
+          title: '',
+          subtitle: '',
           mediaType: 'image',
           mediaUrl: '',
         },
         {
           order: 2,
-          title: 'Track Constituency Progress',
-          subtitle: 'Transparent monitoring of road repairs, hospitals, school infrastructure & water projects.',
+          title: '',
+          subtitle: '',
           mediaType: 'image',
           mediaUrl: '',
         },
         {
           order: 3,
-          title: 'Direct Grievance Redressal',
-          subtitle: 'Report ward problems with photo evidence and get direct resolution from field teams.',
+          title: '',
+          subtitle: '',
           mediaType: 'video',
           mediaUrl: '',
         },
         {
           order: 4,
-          title: 'Join Campaign & Volunteer',
-          subtitle: 'Generate branded campaign banners with your photo and share on WhatsApp.',
+          title: '',
+          subtitle: '',
           mediaType: 'image',
           mediaUrl: '',
         },
@@ -917,6 +917,21 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
   // Multi-Slide Splash & Walkthrough Handlers (SRS Sec 49 & 70)
   async function handleSlideMediaUpload(index, file) {
     if (!file) return;
+    const localBlob = URL.createObjectURL(file);
+    setForm(f => {
+      const updated = [...(f.branding.splashScreens || [])];
+      if (updated[index]) {
+        updated[index] = { ...updated[index], mediaUrl: localBlob };
+      }
+      return {
+        ...f,
+        branding: {
+          ...f.branding,
+          splashScreens: updated,
+          ...(index === 0 ? { splashScreenUrl: localBlob } : {}),
+        },
+      };
+    });
     try {
       setUploadingSlideIndex(index);
       setError('');
@@ -924,14 +939,14 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
       setForm(f => {
         const updated = [...(f.branding.splashScreens || [])];
         if (updated[index]) {
-          updated[index] = { ...updated[index], mediaUrl: path };
+          updated[index] = { ...updated[index], mediaUrl: path || localBlob };
         }
         return {
           ...f,
           branding: {
             ...f.branding,
             splashScreens: updated,
-            ...(index === 0 ? { splashScreenUrl: path } : {}),
+            ...(index === 0 ? { splashScreenUrl: path || localBlob } : {}),
           },
         };
       });
@@ -948,8 +963,8 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
       const nextNum = current.length + 1;
       const newSlide = {
         order: nextNum,
-        title: `Constituency Drive ${nextNum}`,
-        subtitle: 'Connect with volunteers and stay informed on local development milestones.',
+        title: '',
+        subtitle: '',
         mediaType: 'image',
         mediaUrl: '',
       };
@@ -1808,38 +1823,28 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
                               <span>5G 84%</span>
                             </div>
 
-                            {/* Slide Overlay and Interactive Dot Controls */}
-                            <div className="relative z-10 p-2.5 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent space-y-1">
-                              <p className="text-[11px] font-bold text-white line-clamp-1 leading-tight drop-shadow-xs">
-                                {currentSlide.title || 'Welcome to App'}
-                              </p>
-                              <p className="text-[9px] text-gray-300 line-clamp-2 leading-tight">
-                                {currentSlide.subtitle || 'Experience direct constituency connect & local progress.'}
-                              </p>
-
-                              {/* Interactive Pagination Dots & Advancer */}
-                              <div className="flex items-center justify-between pt-1 border-t border-white/10">
-                                <div className="flex items-center gap-1">
-                                  {slides.map((_, dotIdx) => (
-                                    <button
-                                      key={dotIdx}
-                                      type="button"
-                                      onClick={() => setActiveSplashSlideIndex(dotIdx)}
-                                      className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                                        dotIdx === activeIndex ? 'w-4 bg-purple-400' : 'w-1.5 bg-white/40 hover:bg-white/70'
-                                      }`}
-                                      title={`View Slide ${dotIdx + 1}`}
-                                    />
-                                  ))}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setActiveSplashSlideIndex((activeIndex + 1) % slides.length)}
-                                  className="text-[9px] font-bold text-white px-2 py-0.5 rounded bg-purple-600 hover:bg-purple-500 transition-colors shadow-2xs cursor-pointer"
-                                >
-                                  {activeIndex === slides.length - 1 ? 'Start' : 'Next ›'}
-                                </button>
+                            {/* Interactive Pagination Dots & Advancer */}
+                            <div className="relative z-10 p-2.5 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent flex items-center justify-between">
+                              <div className="flex items-center gap-1">
+                                {slides.map((_, dotIdx) => (
+                                  <button
+                                    key={dotIdx}
+                                    type="button"
+                                    onClick={() => setActiveSplashSlideIndex(dotIdx)}
+                                    className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                                      dotIdx === activeIndex ? 'w-4 bg-purple-400' : 'w-1.5 bg-white/40 hover:bg-white/70'
+                                    }`}
+                                    title={`View Slide ${dotIdx + 1}`}
+                                  />
+                                ))}
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => setActiveSplashSlideIndex((activeIndex + 1) % slides.length)}
+                                className="text-[9px] font-bold text-white px-2 py-0.5 rounded bg-purple-600 hover:bg-purple-500 transition-colors shadow-2xs cursor-pointer"
+                              >
+                                {activeIndex === slides.length - 1 ? 'Start' : 'Next ›'}
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -2260,36 +2265,8 @@ export default function OnboardingWizardModal({ isOpen, onClose, onSuccess }) {
                           </div>
                         </div>
 
-                        {/* Title & Subtitle Inputs */}
-                        <div className="space-y-2 mb-3">
-                          <div>
-                            <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1">
-                              Slide Title
-                            </label>
-                            <input
-                              type="text"
-                              value={slide.title || ''}
-                              placeholder="e.g. Welcome to Citizen Connect"
-                              onChange={e => handleUpdateSplashSlide(sIdx, 'title', e.target.value)}
-                              className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 bg-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1">
-                              Subtitle / Description
-                            </label>
-                            <input
-                              type="text"
-                              value={slide.subtitle || ''}
-                              placeholder="e.g. Transparent constituency development tracking..."
-                              onChange={e => handleUpdateSplashSlide(sIdx, 'subtitle', e.target.value)}
-                              className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 bg-white"
-                            />
-                          </div>
-                        </div>
-
                         {/* Media Upload & URL Row */}
-                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                        <div className="space-y-2">
                           <div className="flex items-center gap-2">
                             <label className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-xs font-bold text-purple-700 cursor-pointer shadow-2xs transition-colors">
                               {isUploadingThis ? (
