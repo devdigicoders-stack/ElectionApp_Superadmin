@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import NotificationBellDropdown from '../components/NotificationBellDropdown';
+import { requestNotificationPermissionAndGetToken } from '../config/firebase';
+import { notificationsService } from '../services/notifications.service';
 import { 
   LayoutDashboard, Users, CreditCard, Layers, Palette, 
   UserCircle, BarChart3, Plug, ScrollText, Settings, 
@@ -103,6 +105,29 @@ export default function AdminLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // ── AUTO FCM TOKEN REGISTRATION ON LOGIN ───────────────────────────────────
+  // On every Super Admin login / layout mount:
+  //  • Permission granted  → silently refresh token & save to backend
+  //  • Permission default  → request browser permission then save
+  //  • Permission denied   → skip silently
+  useEffect(() => {
+    const autoRegisterFcmToken = async () => {
+      try {
+        if (typeof window === 'undefined' || !('Notification' in window)) return;
+        if (Notification.permission === 'denied') return;
+
+        const res = await requestNotificationPermissionAndGetToken();
+        if (res?.success && res?.token) {
+          // Ensure token is always fresh in backend
+          await notificationsService.registerFcmToken(res.token).catch(() => {});
+        }
+      } catch {
+        // Silent fail — don't disrupt Super Admin UI
+      }
+    };
+    autoRegisterFcmToken();
+  }, []);
 
   // Close sidebar on mobile when route changes
   useEffect(() => {

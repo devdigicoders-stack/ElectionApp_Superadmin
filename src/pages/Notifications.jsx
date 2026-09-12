@@ -911,7 +911,11 @@ export default function Notifications() {
                         <td className="p-3.5 whitespace-nowrap">
                           {item.pushSuccessCount > 0 ? (
                             <span className="text-emerald-600 font-bold flex items-center gap-1">
-                              <Check className="w-3 h-3" /> {item.pushSuccessCount} delivered
+                              <Check className="w-3.5 h-3.5" /> {item.pushSuccessCount} delivered
+                            </span>
+                          ) : item.channels?.includes('push') ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                              <AlertTriangle className="w-3 h-3 text-amber-500" /> 0 delivered (No device linked)
                             </span>
                           ) : (
                             <span className="text-gray-400">In-App only</span>
