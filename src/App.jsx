@@ -16,6 +16,7 @@ import Profile from './pages/Profile';
 import MasterAreas from './pages/MasterAreas';
 import Exports from './pages/Exports';
 import PlatformSettings from './pages/Settings';
+import Inquiries from './pages/Inquiries';
 
 // Protected Route — bina token ke andar nahi jaane deta
 function ProtectedRoute({ children }) {
@@ -93,6 +94,7 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/inquiries" element={<PermissionRoute permission="tenants:read"><Inquiries /></PermissionRoute>} />
           <Route path="/clients" element={<PermissionRoute permission="tenants:read"><Clients /></PermissionRoute>} />
           <Route path="/master-areas" element={<PermissionRoute permission="tenants:read"><MasterAreas /></PermissionRoute>} />
           <Route path="/plans" element={<PermissionRoute permission="plans:read"><Plans /></PermissionRoute>} />

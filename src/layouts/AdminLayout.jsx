@@ -19,6 +19,7 @@ const LogoIcon = () => (
 
 export const navItems = [
   { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  { name: 'Website Inquiries', path: '/inquiries', icon: MessageSquare, permission: 'tenants:read' },
   { name: 'Tenants / Clients', path: '/clients', icon: Users, permission: 'tenants:read' },
   { name: 'Master Areas', path: '/master-areas', icon: MapPin, permission: 'tenants:read' },
   { name: 'Subscription Plans', path: '/plans', icon: CreditCard, permission: 'plans:read' },
